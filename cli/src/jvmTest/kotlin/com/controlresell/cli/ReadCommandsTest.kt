@@ -19,7 +19,7 @@ class ReadCommandsTest {
         assertEquals(0, result.code, result.stderr)
         assertContains(result.stdout, "Shop 1")
         assertContains(result.stdout, "acc_2")
-        assertEquals("Next page: cr accounts list --cursor c2\n", result.stderr)
+        assertEquals("Next page: run the same command with --cursor c2\n", result.stderr)
         assertEquals("2", cli.requests.single().url.parameters["limit"])
     }
 
@@ -49,15 +49,55 @@ class ReadCommandsTest {
         assertEquals("", text.stderr)
     }
 
+    /** Pages of [size] accounts, chained by the cursors c1, c2, ... without end. */
+    private fun CliHarness.endlessAccounts(size: Int, pages: Int) {
+        for (n in 0 until pages) {
+            val data = (1..size).joinToString(",") { account(n * size + it) }
+            on(HttpMethod.Get, "/api/public/v1/accounts", body = """{"data":[$data],"nextCursor":"c${n + 1}"}""",
+                query = mapOf("cursor" to if (n == 0) null else "c$n"))
+        }
+    }
+
     @Test fun `all stops at its ceiling and says how to continue`() = runTest {
         val cli = signedIn()
-        val full = (1..100).joinToString(",", prefix = """{"data":[""", postfix = """],"nextCursor":"more"}""") { account(it) }
-        cli.on(HttpMethod.Get, "/api/public/v1/accounts", body = full)
+        cli.endlessAccounts(size = 100, pages = 101)
         val result = cli.run("accounts", "list", "--all", "--json")
-        assertEquals(0, result.code)
-        assertEquals(10_000, Json.parseToJsonElement(result.stdout).jsonObject["data"]!!.jsonArray.size)
-        assertContains(result.stderr, "Stopped after 10000 elements. Continue with: cr accounts list --cursor more")
+        assertEquals(0, result.code, result.stderr)
+        val merged = Json.parseToJsonElement(result.stdout).jsonObject
+        assertEquals(10_000, merged["data"]!!.jsonArray.size)
+        assertEquals("c100", merged["nextCursor"]!!.jsonPrimitive.content)
+        assertContains(result.stderr, "Stopped after 10000 elements. Continue: run the same command with --cursor c100")
         assertEquals(100, cli.requests.size)
+        assertTrue(cli.requests.all { it.url.parameters["limit"] == "100" })
+    }
+
+    @Test fun `all never asks for more than the ceiling`() = runTest {
+        val cli = signedIn()
+        cli.endlessAccounts(size = 30, pages = 335)
+        val result = cli.run("accounts", "list", "--all", "--limit", "30", "--json")
+        assertEquals(0, result.code, result.stderr)
+        // 333 full pages make 9,990 elements: the last request asks for the 10 left, so the cursor skips nothing.
+        assertEquals(334, cli.requests.size)
+        assertEquals("10", cli.requests.last().url.parameters["limit"])
+    }
+
+    @Test fun `all starts from a given cursor and refuses a repeated one`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Get, "/api/public/v1/items", body = """{"data":[${item(2)}],"nextCursor":null}""", query = mapOf("cursor" to "p2"))
+        assertEquals(0, cli.run("items", "list", "--all", "--cursor", "p2").code)
+        assertEquals("p2", cli.requests.single().url.parameters["cursor"])
+        cli.on(HttpMethod.Get, "/api/public/v1/items", body = """{"data":[${item(3)}],"nextCursor":"p3"}""", query = mapOf("cursor" to "p3"))
+        val looping = cli.run("items", "list", "--all", "--cursor", "p3")
+        assertEquals(ExitCode.FAILURE, looping.code)
+        assertContains(looping.stderr, "same page cursor twice")
+    }
+
+    @Test fun `an unexpected body in JSON mode is a clean failure`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Get, "/api/public/v1/accounts", body = "<html>gateway</html>")
+        val result = cli.run("accounts", "list", "--json")
+        assertEquals(ExitCode.FAILURE, result.code)
+        assertEquals("The API answered with an unexpected body.\n", result.stderr)
     }
 
     @Test fun `filters are sent as query parameters`() = runTest {
@@ -74,7 +114,6 @@ class ReadCommandsTest {
 
     @Test fun `invalid paging options are usage errors`() = runTest {
         val cli = signedIn()
-        assertEquals(ExitCode.USAGE, cli.run("items", "list", "--all", "--cursor", "x").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "list", "--limit", "101").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "get", "not-a-number").code)
         assertTrue(cli.requests.isEmpty())

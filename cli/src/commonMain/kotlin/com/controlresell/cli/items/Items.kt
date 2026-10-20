@@ -27,8 +27,8 @@ private class ListItems(private val environment: CliEnvironment) : SuspendingCli
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the items, most recently created first."
     override suspend fun run() = environment.sdk().use { client ->
-        printList(paging, json, "cr items list", fetch = { cursor ->
-            fetchPage(client.items.listItems(limit = paging.limit, cursor = cursor, sold = sold, accountId = account),
+        printList(paging, json, fetch = { cursor, limit ->
+            fetchPage(client.items.listItems(limit = limit, cursor = cursor, sold = sold, accountId = account),
                 { it.`data` }, { it.nextCursor }, json)
         }, render = { items ->
             terminal.table(listOf("ID", "Name", "Status", "Price", "Created"), items.map {

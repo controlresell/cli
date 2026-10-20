@@ -27,8 +27,8 @@ private class ListConversations(private val environment: CliEnvironment) : Suspe
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the conversations, most recently updated first."
     override suspend fun run() = environment.sdk().use { client ->
-        printList(paging, json, "cr conversations list", fetch = { cursor ->
-            fetchPage(client.conversations.listConversations(limit = paging.limit, cursor = cursor, unread = unread, accountId = account),
+        printList(paging, json, fetch = { cursor, limit ->
+            fetchPage(client.conversations.listConversations(limit = limit, cursor = cursor, unread = unread, accountId = account),
                 { it.`data` }, { it.nextCursor }, json)
         }, render = { conversations ->
             terminal.table(listOf("ID", "Account", "Buyer", "Unread", "Last message", "Updated"), conversations.map {
@@ -54,8 +54,8 @@ private class ConversationMessages(private val environment: CliEnvironment) : Su
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the messages of a conversation."
     override suspend fun run() = environment.sdk().use { client ->
-        printList(paging, json, "cr conversations messages $id", fetch = { cursor ->
-            fetchPage(client.conversations.listConversationMessages(id = id, limit = paging.limit, cursor = cursor),
+        printList(paging, json, fetch = { cursor, limit ->
+            fetchPage(client.conversations.listConversationMessages(id = id, limit = limit, cursor = cursor),
                 { it.`data` }, { it.nextCursor }, json)
         }, render = { messages ->
             terminal.table(listOf("ID", "Author", "Type", "Status", "Sent", "Text"), messages.map {

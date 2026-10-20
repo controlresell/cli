@@ -104,7 +104,7 @@ def main():
             # Reads: tables, JSON pages as the API answers them, every page with --all, filters and exit codes.
             listed = cr('items', 'list', '--limit', '2')
             assert 'Item 1' in listed.stdout and 'Item 2' in listed.stdout and 'Item 3' not in listed.stdout
-            assert 'Next page: cr items list --cursor 2' in listed.stderr
+            assert 'Next page: run the same command with --cursor 2' in listed.stderr
             merged = json.loads(cr('items', 'list', '--all', '--limit', '2', '--json').stdout)
             assert [item['id'] for item in merged['data']] == [1, 2, 3, 4, 5] and merged['nextCursor'] is None
             assert [item['id'] for item in json.loads(cr('items', 'list', '--sold', 'true', '--json').stdout)['data']] == [2, 4]
@@ -118,7 +118,9 @@ def main():
             assert cr('items', 'get', '999', code=4).stderr.startswith('error: item_not_found: No such item. (request req_smoke)')
             assert 'error: plan_required' in cr('items', 'get', '402', code=5).stderr
             assert 'Retry after 7 seconds.' in cr('items', 'get', '429', code=6).stderr
-            cr('items', 'list', '--all', '--cursor', '2', code=2)
+            resumed = json.loads(cr('items', 'list', '--all', '--cursor', '2', '--json').stdout)
+            assert [item['id'] for item in resumed['data']] == [3, 4, 5]
+            cr('items', 'list', '--limit', '0', code=2)
 
             cr('logout')
             assert not config_path.exists()

@@ -23,8 +23,8 @@ private class ListAccounts(private val environment: CliEnvironment) : Suspending
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the marketplace accounts."
     override suspend fun run() = environment.sdk().use { client ->
-        printList(paging, json, "cr accounts list", fetch = { cursor ->
-            fetchPage(client.accounts.listAccounts(limit = paging.limit, cursor = cursor), { it.`data` }, { it.nextCursor }, json)
+        printList(paging, json, fetch = { cursor, limit ->
+            fetchPage(client.accounts.listAccounts(limit = limit, cursor = cursor), { it.`data` }, { it.nextCursor }, json)
         }, render = { accounts ->
             terminal.table(listOf("ID", "Platform", "Name", "Status"), accounts.map { listOf(it.id, it.platform, it.name, it.status) },
                 empty = "No accounts.")
