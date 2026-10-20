@@ -20,6 +20,12 @@ kotlin {
     jvmToolchain(21)
     jvm { testRuns["test"].executionTask.configure { useJUnitPlatform() } }
     listOf(macosArm64(), macosX64(), linuxX64(), linuxArm64(), mingwX64()).forEach { target ->
+        if (target.name.startsWith("mingw")) {
+            target.compilations.getByName("main").cinterops.create("windows") {
+                definitionFile.set(project.file("src/nativeInterop/cinterop/windows.def"))
+                includeDirs(project.file("src/nativeInterop/cinterop"))
+            }
+        }
         target.binaries.executable {
             entryPoint = "com.controlresell.cli.main"
             baseName = "cr"
@@ -36,8 +42,13 @@ kotlin {
         }
     }
     sourceSets {
+        // Shared POSIX implementation compiled with each platform's own interop.
+        macosMain.get().kotlin.srcDir("src/posixMain/kotlin")
+        linuxMain.get().kotlin.srcDir("src/posixMain/kotlin")
         commonMain { kotlin.srcDir(generateBuildInfo) }
         commonMain.dependencies {
+            implementation(libs.controlresell.sdk)
+            implementation(libs.serialization)
             implementation(libs.clikt)
             implementation(libs.mordant)
             implementation(libs.okio)
@@ -45,6 +56,9 @@ kotlin {
             implementation(libs.ktor.client.engine.defaults)
         }
         commonTest.dependencies { implementation(kotlin("test")); implementation(libs.coroutines.test) }
-        jvmTest.dependencies { runtimeOnly(libs.junit) }
+        jvmTest.dependencies {
+            runtimeOnly(libs.junit)
+            implementation(libs.ktor.client.mock)
+        }
     }
 }

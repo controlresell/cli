@@ -36,4 +36,6 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Publish the Kotlin SDK locally (temporary, until it is on Maven Central)
+        run: scripts/publish-sdk-locally.sh publishKotlinMultiplatformPublicationToMavenLocal publishJvmPublicationToMavenLocal
       - run: ./gradlew :cli:jvmTest
