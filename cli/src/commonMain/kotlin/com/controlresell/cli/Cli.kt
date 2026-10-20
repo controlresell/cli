@@ -5,6 +5,7 @@ import com.controlresell.cli.config.*
 import com.controlresell.cli.conversations.Conversations
 import com.controlresell.cli.identity.*
 import com.controlresell.cli.items.Items
+import com.controlresell.cli.update.*
 import com.controlresell.cli.platform.*
 import com.controlresell.sdk.ControlResell
 import com.controlresell.sdk.ControlResellConnectionException
@@ -14,6 +15,8 @@ import com.github.ajalt.clikt.command.*
 import com.github.ajalt.clikt.core.*
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 const val VERSION = BuildInfo.VERSION
@@ -46,7 +49,7 @@ class Cli(environment: CliEnvironment = CliEnvironment()) : SuspendingNoOpCliktC
     override fun help(context: Context) = "The ControlResell command line. First use: cr login."
     init {
         subcommands(Login(environment), Logout(environment), WhoAmI(environment), Accounts(environment), Items(environment),
-            Conversations(environment), Version())
+            Conversations(environment), Version(), VerifyRelease(), Update(), Install())
     }
 }
 
@@ -72,24 +75,45 @@ catch (_: ControlResellConnectionException) {
     Outcome(ExitCode.FAILURE, "Could not reach the ControlResell API. Check your connection and the API URL.")
 }
 catch (error: CliFailure) { Outcome(error.exitCode, error.safeMessage) }
-catch (error: CliOperationException) {
-    Outcome(ExitCode.FAILURE, "ControlResell command failed (${error.code}). Check connectivity, authentication and private file permissions.")
-}
+catch (error: CliOperationException) { failure(error) }
 catch (_: Exception) {
     // Never print exception chains from TLS, JSON, file paths or remote servers: they may carry credentials.
     Outcome(ExitCode.FAILURE, "ControlResell command failed. Check connectivity, authentication and file permissions.")
 }
 
+private fun failure(error: CliOperationException) = Outcome(ExitCode.FAILURE,
+    if (error.code.startsWith("release_")) "ControlResell CLI release operation failed (${error.code}). Check connectivity, release files, private permissions and platform crypto libraries."
+    else "ControlResell command failed (${error.code}). Check connectivity, authentication and private file permissions.")
+
+/** The commands that manage the installation itself: they take its locks, so they hold no lease and get no notice. */
+private val INSTALLATION_COMMANDS = setOf("install", "update")
+
 fun main(args: Array<String>): Unit = runBlocking {
+    val notices = mutableListOf<String>()
     val outcome = try {
-        execute(Cli(), platformArguments(args).toList())
+        val arguments = platformArguments(args)
+        if (arguments.firstOrNull() == "--controlresell-installation-probe") {
+            SystemExit.exit(if (arguments.toList() == listOf("--controlresell-installation-probe", VERSION, PUBLIC_API_VERSION.toString())) 0 else 1)
+        }
+        dispatchInstalled(arguments)
+        val managing = arguments.firstOrNull() in INSTALLATION_COMMANDS
+        val lease = if (managing) null else commandInstallationLease()
+        try {
+            coroutineScope {
+                // Beside the command, never before it: a release check cannot delay or fail a command.
+                val check = if (!managing && stderrIsTerminal()) launch { checkReleaseUpdate { notices += it } } else null
+                try { execute(Cli(), arguments.toList()) } finally { check?.cancel() }
+            }
+        } finally { lease?.close() }
     } catch (error: CancellationException) { throw error }
+    catch (error: CliOperationException) { failure(error) }
     catch (_: Exception) { Outcome(ExitCode.FAILURE, "ControlResell command failed. Check connectivity, authentication and file permissions.") }
+    notices.forEach(SystemExit::notice)
     outcome.message?.let { SystemExit.fail(it, outcome.code) }
     SystemExit.exit(outcome.code)
 }
 
-expect object SystemExit { fun fail(message: String, code: Int = 1): Nothing; fun exit(code: Int): Nothing }
+expect object SystemExit { fun fail(message: String, code: Int = 1): Nothing; fun exit(code: Int): Nothing; fun notice(message: String) }
 
 /** Safe operation identifiers only; never print raw platform/HTTP exception messages. */
 class CliOperationException(val code: String) : Exception() {

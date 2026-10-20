@@ -20,6 +20,7 @@ on:
         default: false
 env:
   ORG_GRADLE_PROJECT_controlresellCliVersion: ${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.full_validation && inputs.validation_version) || '0.1.0-SNAPSHOT' }}
+  CONTROLRESELL_INSTALLATION_VERSION: 0.0.0-installation.g${{ github.sha }}
 permissions:
   contents: read
 concurrency:
@@ -38,4 +39,412 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Publish the Kotlin SDK locally (temporary, until it is on Maven Central)
         run: scripts/publish-sdk-locally.sh publishKotlinMultiplatformPublicationToMavenLocal publishJvmPublicationToMavenLocal
+      - run: python3 scripts/release-request.py
+      - run: python3 -m unittest discover -s scripts -p 'test_release_*.py'
       - run: ./gradlew :cli:jvmTest
+  native:
+    # Keep paid native runners off ordinary pushes and pull requests.
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Linux transport dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Select native target
+        shell: bash
+        run: |
+          case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64) target=MacosArm64; directory=macosArm64; asset=macos-arm64 ;;
+            Darwin-x86_64) target=MacosX64; directory=macosX64; asset=macos-x64 ;;
+            Linux-x86_64) target=LinuxX64; directory=linuxX64; asset=linux-x64 ;;
+            *) echo 'Unsupported runner architecture'; exit 1 ;;
+          esac
+          {
+            echo "NATIVE_TARGET=$target"
+            echo "NATIVE_DIRECTORY=$directory"
+            echo "NATIVE_ASSET=$asset"
+            echo "CONTROLRESELL_CLI_VERSION=${ORG_GRADLE_PROJECT_controlresellCliVersion}"
+          } >> "$GITHUB_ENV"
+      - name: Publish the Kotlin SDK locally (temporary, until it is on Maven Central)
+        shell: bash
+        run: scripts/publish-sdk-locally.sh publishKotlinMultiplatformPublicationToMavenLocal "publish${NATIVE_TARGET}PublicationToMavenLocal"
+      - run: ./gradlew ":cli:linkReleaseExecutable${NATIVE_TARGET}" ":cli:linkDebugTest${NATIVE_TARGET}"
+      - run: '"cli/build/bin/${NATIVE_DIRECTORY}/debugTest/test.kexe"'
+      - run: python3 scripts/smoke-release-verification.py --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe"
+      - run: python3 scripts/smoke-native.py --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" --expected-version "$CONTROLRESELL_CLI_VERSION"
+      - name: Stage the tested native release asset
+        run: python3 scripts/release-bundle.py stage --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" --target "$NATIVE_ASSET" --version "$CONTROLRESELL_CLI_VERSION" --commit "$GITHUB_SHA" --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ env.NATIVE_ASSET }}
+          path: dist/*
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-${{ env.NATIVE_DIRECTORY }}
+          path: cli/build/bin/${{ env.NATIVE_DIRECTORY }}/releaseExecutable/cr.kexe
+          retention-days: 7
+      - name: Compile a distinct version of the same source for installation acceptance
+        run: ./gradlew "-PcontrolresellCliVersion=$CONTROLRESELL_INSTALLATION_VERSION" ":cli:linkReleaseExecutable${NATIVE_TARGET}"
+      - name: Stage the actual installation-baseline executable
+        run: python3 scripts/release-bundle.py stage --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" --target "$NATIVE_ASSET" --version "$CONTROLRESELL_INSTALLATION_VERSION" --commit "$GITHUB_SHA" --output installation-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installation-release-${{ env.NATIVE_ASSET }}
+          path: installation-dist/*
+          retention-days: 7
+  windows:
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Publish the Kotlin SDK locally (temporary, until it is on Maven Central)
+        shell: bash
+        run: scripts/publish-sdk-locally.sh publishKotlinMultiplatformPublicationToMavenLocal publishMingwX64PublicationToMavenLocal
+      - run: .\gradlew.bat :cli:linkReleaseExecutableMingwX64 :cli:linkDebugTestMingwX64
+      - run: .\cli\build\bin\mingwX64\debugTest\test.exe
+      - run: python scripts/smoke-release-verification.py --binary cli/build/bin/mingwX64/releaseExecutable/cr.exe
+      - name: Stage the tested native release asset
+        shell: pwsh
+        run: |
+          $releaseVersion = $env:ORG_GRADLE_PROJECT_controlresellCliVersion
+          python scripts/release-bundle.py stage --binary cli/build/bin/mingwX64/releaseExecutable/cr.exe --target windows-x64 --version $releaseVersion --commit $env:GITHUB_SHA --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: dist/*
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-windows-x64
+          path: cli/build/bin/mingwX64/releaseExecutable/cr.exe
+          retention-days: 7
+      - name: Compile a distinct version of the same source for installation acceptance
+        shell: pwsh
+        run: .\gradlew.bat "-PcontrolresellCliVersion=$env:CONTROLRESELL_INSTALLATION_VERSION" :cli:linkReleaseExecutableMingwX64
+      - name: Stage the actual installation-baseline executable
+        shell: pwsh
+        run: python scripts/release-bundle.py stage --binary cli/build/bin/mingwX64/releaseExecutable/cr.exe --target windows-x64 --version $env:CONTROLRESELL_INSTALLATION_VERSION --commit $env:GITHUB_SHA --output installation-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installation-release-windows-x64
+          path: installation-dist/*
+          retention-days: 7
+
+  cross_build:
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: LinuxArm64
+            directory: linuxArm64
+            asset: linux-arm64
+          - os: macos-latest
+            target: MacosX64
+            directory: macosX64
+            asset: macos-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      NATIVE_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Publish the Kotlin SDK locally (temporary, until it is on Maven Central)
+        shell: bash
+        run: scripts/publish-sdk-locally.sh publishKotlinMultiplatformPublicationToMavenLocal "publish${NATIVE_TARGET}PublicationToMavenLocal"
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - run: ./gradlew ":cli:linkReleaseExecutable${NATIVE_TARGET}" ":cli:linkDebugTest${NATIVE_TARGET}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-tests-${{ matrix.asset }}
+          path: cli/build/bin/${{ matrix.directory }}/debugTest/test.kexe
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ matrix.asset }}
+          path: cli/build/bin/${{ matrix.directory }}/releaseExecutable/cr.kexe
+          retention-days: 1
+      - name: Compile the distinct installation-baseline version
+        run: ./gradlew "-PcontrolresellCliVersion=$CONTROLRESELL_INSTALLATION_VERSION" ":cli:linkReleaseExecutable${NATIVE_TARGET}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installation-candidate-${{ matrix.asset }}
+          path: cli/build/bin/${{ matrix.directory }}/releaseExecutable/cr.kexe
+          retention-days: 1
+  cross_native:
+    timeout-minutes: 20
+    needs: [cross_build, jvm]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04-arm
+            directory: linuxArm64
+            asset: linux-arm64
+            architecture: aarch64
+          - os: macos-15-intel
+            directory: macosX64
+            asset: macos-x64
+            architecture: x86_64
+    runs-on: ${{ matrix.os }}
+    env:
+      NATIVE_DIRECTORY: ${{ matrix.directory }}
+      NATIVE_ASSET: ${{ matrix.asset }}
+      EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-${{ matrix.asset }}
+          path: cli/build/bin/${{ matrix.directory }}/releaseExecutable
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-tests-${{ matrix.asset }}
+          path: cli/build/bin/${{ matrix.directory }}/debugTest
+      - uses: actions/download-artifact@v4
+        with:
+          name: installation-candidate-${{ matrix.asset }}
+          path: installation-candidate
+      - name: Select the actual target runtime
+        run: |
+          test "$(uname -m)" = "$EXPECTED_ARCHITECTURE"
+          chmod 755 "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" "cli/build/bin/${NATIVE_DIRECTORY}/debugTest/test.kexe"
+          echo "CONTROLRESELL_CLI_VERSION=${ORG_GRADLE_PROJECT_controlresellCliVersion}" >> "$GITHUB_ENV"
+      - run: '"cli/build/bin/${NATIVE_DIRECTORY}/debugTest/test.kexe"'
+      - run: python3 scripts/smoke-release-verification.py --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe"
+      - run: python3 scripts/smoke-native.py --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" --expected-version "$CONTROLRESELL_CLI_VERSION"
+      - name: Stage the tested native release asset
+        run: python3 scripts/release-bundle.py stage --binary "cli/build/bin/${NATIVE_DIRECTORY}/releaseExecutable/cr.kexe" --target "$NATIVE_ASSET" --version "$CONTROLRESELL_CLI_VERSION" --commit "$GITHUB_SHA" --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.asset }}
+          path: dist/*
+          retention-days: 7
+      - name: Stage the baseline version on its actual OS and CPU
+        run: |
+          chmod 755 installation-candidate/cr.kexe
+          python3 scripts/release-bundle.py stage --binary installation-candidate/cr.kexe --target "$NATIVE_ASSET" --version "$CONTROLRESELL_INSTALLATION_VERSION" --commit "$GITHUB_SHA" --output installation-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installation-release-${{ matrix.asset }}
+          path: installation-dist/*
+          retention-days: 7
+  bundle:
+    timeout-minutes: 5
+    needs: [native, windows, cross_native]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: staged
+      - name: Verify and assemble all five tested targets
+        run: python3 scripts/release-bundle.py assemble --inputs staged --version "${ORG_GRADLE_PROJECT_controlresellCliVersion}" --commit "$GITHUB_SHA" --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-release-bundle
+          path: dist/*
+          retention-days: 7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installation-release-*
+          merge-multiple: true
+          path: installation-staged
+      - name: Verify and assemble all five distinct-version baselines
+        run: python3 scripts/release-bundle.py assemble --inputs installation-staged --version "$CONTROLRESELL_INSTALLATION_VERSION" --commit "$GITHUB_SHA" --output installation-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-installation-bundle
+          path: installation-dist/*
+          retention-days: 7
+  signed_bundle:
+    timeout-minutes: 5
+    # Pull-request code never receives the publisher key, including same-repository PRs.
+    if: github.event_name != 'pull_request'
+    needs: [bundle]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cr-release-bundle
+          path: dist
+      - name: Sign the exact release manifest with the independent publisher key
+        env:
+          CONTROLRESELL_RELEASE_SIGNING_KEY: ${{ secrets.CONTROLRESELL_CLI_RELEASE_SIGNING_KEY }}
+        run: python3 scripts/release-signature.py sign --manifest dist/manifest.json --signature dist/manifest.sig --public-key release/trust/controlresell-cli-release-2026.pem
+      - name: Verify the published signature against the pinned public key
+        run: python3 scripts/release-signature.py verify --manifest dist/manifest.json --signature dist/manifest.sig --public-key release/trust/controlresell-cli-release-2026.pem
+      - name: Generate version-pinned one-command installers from the signed bundle
+        run: python3 scripts/release-bootstrap.py --bundle dist --public-key release/trust/controlresell-cli-release-2026.pem
+      - uses: actions/download-artifact@v4
+        with:
+          name: cr-installation-bundle
+          path: installation-dist
+      - name: Sign the compiled installation-baseline manifest
+        env:
+          CONTROLRESELL_RELEASE_SIGNING_KEY: ${{ secrets.CONTROLRESELL_CLI_RELEASE_SIGNING_KEY }}
+        run: python3 scripts/release-signature.py sign --manifest installation-dist/manifest.json --signature installation-dist/manifest.sig --public-key release/trust/controlresell-cli-release-2026.pem
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-signed-release-bundle
+          path: dist/*
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cr-signed-installation-bundle
+          path: installation-dist/*
+          retention-days: 7
+  signed_installation:
+    timeout-minutes: 10
+    needs: [signed_bundle]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: macos-arm64
+            architecture: arm64
+          - os: macos-15-intel
+            target: macos-x64
+            architecture: x86_64
+          - os: ubuntu-24.04
+            target: linux-x64
+            architecture: x86_64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            architecture: aarch64
+          - os: windows-latest
+            target: windows-x64
+            architecture: AMD64
+    runs-on: ${{ matrix.os }}
+    # These jobs receive public signed files, never signing or API credentials.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cr-signed-release-bundle
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: cr-signed-installation-bundle
+          path: installation-dist
+      - name: Install Linux transport and verification dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl3t64
+      - name: Start Linux user service manager
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@$(id -u).service"
+          {
+            echo "XDG_RUNTIME_DIR=/run/user/$(id -u)"
+            echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus"
+          } >> "$GITHUB_ENV"
+      - name: Exercise the actual native signed installation
+        shell: bash
+        env:
+          INSTALLATION_TARGET: ${{ matrix.target }}
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          python -c 'import os,platform; assert platform.machine() == os.environ["EXPECTED_ARCHITECTURE"], "Wrong runtime architecture"'
+          python scripts/installation-fixture.py --first-bundle installation-dist --second-bundle dist --target "$INSTALLATION_TARGET" --output installation-fixtures
+          releaseVersion="${ORG_GRADLE_PROJECT_controlresellCliVersion}"
+          suffix=""
+          if [[ "$INSTALLATION_TARGET" == windows-* ]]; then suffix=".exe"; fi
+          binary="installation-fixtures/second/cr-${releaseVersion}-${INSTALLATION_TARGET}${suffix}"
+          python scripts/smoke-installation.py --binary "$binary" --first-bundle installation-fixtures/first --second-bundle installation-fixtures/second
+      - name: Exercise the generated bootstrap on the actual native target
+        shell: bash
+        run: python scripts/smoke-bootstrap.py --bundle dist
+      - name: Exercise the independent automatic update job
+        shell: bash
+        env:
+          INSTALLATION_TARGET: ${{ matrix.target }}
+        run: |
+          suffix=""
+          if [[ "$INSTALLATION_TARGET" == windows-* ]]; then suffix=".exe"; fi
+          binary="installation-fixtures/second/cr-${ORG_GRADLE_PROJECT_controlresellCliVersion}-${INSTALLATION_TARGET}${suffix}"
+          python scripts/smoke-automatic-updates.py --binary "$binary" --first-bundle installation-fixtures/first --second-bundle installation-fixtures/second
+  release:
+    timeout-minutes: 10
+    if: >-
+      (github.event_name == 'push' && github.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_release && inputs.full_validation && github.ref == 'refs/heads/main')
+    needs: [signed_bundle, signed_installation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cr-signed-release-bundle
+          path: dist
+      - name: Verify the exact accepted signature before publication
+        run: python3 scripts/release-signature.py verify --manifest dist/manifest.json --signature dist/manifest.sig --public-key release/trust/controlresell-cli-release-2026.pem
+      - name: Bind accepted files to this exact source and version
+        run: python3 scripts/release-request.py --manifest dist/manifest.json
+      - name: Create the exact tag after all acceptance
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          releaseVersion="$ORG_GRADLE_PROJECT_controlresellCliVersion"
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$releaseVersion" --jq '.object.sha' 2>/dev/null)"; then
+            test "$existing" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$releaseVersion" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+      - name: Publish the verified version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          releaseVersion="$ORG_GRADLE_PROJECT_controlresellCliVersion"
+          flags=()
+          if [[ "$releaseVersion" == *-* ]]; then flags+=(--prerelease); fi
+          notes=(--generate-notes)
+          if [[ -f "docs/releases/$releaseVersion.md" ]]; then
+            notes=(--notes-file "docs/releases/$releaseVersion.md")
+          fi
+          gh release create "$releaseVersion" dist/* --verify-tag "${notes[@]}" --title "$releaseVersion" "${flags[@]}" --draft
+          gh release edit "$releaseVersion" --draft=false

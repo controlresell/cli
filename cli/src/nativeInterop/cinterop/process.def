@@ -1,0 +1,5 @@
+headers = process.h release_crypto.h installation.h
+package = com.controlresell.cli.interop.process
+
+linkerOpts.osx = -framework Security -framework CoreFoundation
+linkerOpts.linux = -ldl

@@ -12,4 +12,8 @@ actual object SystemExit {
         fflush(stderr)
         kotlin.system.exitProcess(code)
     }
+    actual fun notice(message: String) {
+        fputs("$message\n", stderr)
+        fflush(stderr)
+    }
 }
