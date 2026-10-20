@@ -1,0 +1,39 @@
+name: Build
+on:
+  push:
+    branches: [main]
+    tags: ['[0-9]*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full_validation:
+        description: 'Run all five native platforms and signed installation acceptance (paid macOS/Windows runners)'
+        type: boolean
+        default: false
+      validation_version:
+        description: 'Exact stable version for full validation; publication remains off unless publish_release is selected'
+        type: string
+        default: ''
+      publish_release:
+        description: 'After full stable validation on main, create the exact tag/release without rebuilding'
+        type: boolean
+        default: false
+env:
+  ORG_GRADLE_PROJECT_controlresellCliVersion: ${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.full_validation && inputs.validation_version) || '0.1.0-SNAPSHOT' }}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release && format('publish-{0}', inputs.validation_version) || format('build-{0}', github.ref) }}
+  cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && inputs.publish_release) }}
+jobs:
+  jvm:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :cli:jvmTest
