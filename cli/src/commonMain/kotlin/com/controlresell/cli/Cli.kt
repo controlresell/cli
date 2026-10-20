@@ -54,6 +54,7 @@ class Cli(environment: CliEnvironment = CliEnvironment()) : SuspendingNoOpCliktC
 }
 
 private class Version : SuspendingCliktCommand(name = "version") {
+    override fun help(context: Context) = "Print the version of this executable."
     override suspend fun run() { echo("ControlResell CLI $VERSION") }
 }
 
