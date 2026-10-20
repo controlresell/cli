@@ -57,8 +57,10 @@ Every command accepts `--help`. Read commands print a table or a summary; `--jso
 unchanged, for `jq` and scripts.
 
 Lists are paginated. `--limit` sets the page size (1 to 100, 50 by default). When more results exist, the cursor of the
-next page is printed on standard error; pass it back with `--cursor`. `--all` reads every page, up to 10,000
-elements; with `--json`, it prints a single `{"data": [...], "nextCursor": null}` document.
+next page is printed on standard error; run the same command again with `--cursor`. `--all` reads every page, 100 per
+request unless `--limit` is given, and stops at 10,000 elements. With `--json`, it prints a single
+`{"data": [...], "nextCursor": ...}` document; its cursor is null unless the 10,000 ceiling stopped the reading, and
+`--all --cursor` continues from there.
 
 Rate-limited requests are retried after the delay the API asks for. Standard output carries only the command's result;
 errors and notices go to standard error, as `error: CODE: MESSAGE (request REQUEST_ID)` for an API error. Quote the
