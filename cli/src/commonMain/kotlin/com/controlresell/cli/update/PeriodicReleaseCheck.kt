@@ -86,7 +86,9 @@ internal class PeriodicReleaseCheck(
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) {
                 report("Release check unavailable; continuing with the current installation.")
-                previous?.copy(checkedAtMillis = instant, successfulObservation = false) ?: CachedReleaseCheck(checkedAtMillis = instant)
+                // A failure is retried after an hour, not a day, so the hourly job does not stall for a day offline.
+                val retryAt = instant - DAY_MILLIS + FAILURE_RETRY_MILLIS
+                previous?.copy(checkedAtMillis = retryAt, successfulObservation = false) ?: CachedReleaseCheck(checkedAtMillis = retryAt)
             }
             writePrivateFile(cache.toString(), Serialization.json.encodeToString(CachedReleaseCheck.serializer(), updated))
             return updated.takeIf { !forInstallation || it.successfulObservation }?.let(::verified)
@@ -112,7 +114,7 @@ internal class PeriodicReleaseCheck(
         return readReleaseFile(path, maximum).decodeToString(throwOnInvalidSequence = true)
     }
     private data class Fetched(val value: ReleaseCheck?)
-    companion object { const val DAY_MILLIS = 86_400_000L }
+    companion object { const val DAY_MILLIS = 86_400_000L; const val FAILURE_RETRY_MILLIS = 3_600_000L }
 }
 
 /**

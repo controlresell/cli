@@ -39,10 +39,10 @@ internal data class AutomaticUpdateResult(val schemaVersion: Int = 1, val attemp
 internal class AutomaticUpdateStore(paths: InstallationPaths) {
     private val fs = FileSystem.SYSTEM
     val paths = InstallationPaths(fs.canonicalize(paths.root), paths.target)
-    val policy = paths.root / "automatic-update.json"
-    private val result = paths.root / "automatic-update-result.json"
-    val workerLock = paths.root / "automatic-update-worker.lock"
-    val managementLock = paths.root / "automatic-update-settings.lock"
+    val policy = this.paths.root / "automatic-update.json"
+    private val result = this.paths.root / "automatic-update-result.json"
+    val workerLock = this.paths.root / "automatic-update-worker.lock"
+    val managementLock = this.paths.root / "automatic-update-settings.lock"
 
     fun settings(): AutomaticUpdateSettings? = read<AutomaticUpdateSettings>(policy)?.also {
         if (it.executable != paths.launcher.toString()) throw CliOperationException("automatic_settings_invalid")

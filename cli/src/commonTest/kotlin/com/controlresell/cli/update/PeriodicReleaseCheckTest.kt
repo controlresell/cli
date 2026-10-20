@@ -90,6 +90,12 @@ class PeriodicReleaseCheckTest {
             assertEquals(first.release.manifest, offline.release.manifest)
             assertEquals(listOf("Release check unavailable; continuing with the current installation."), reports)
             assertNotNull(checks.check { error("A failed request must also be throttled") })
+            instant += PeriodicReleaseCheck.FAILURE_RETRY_MILLIS - 1
+            assertNotNull(checks.check { error("A failed request is throttled for an hour") })
+            instant += 1
+            var retried = false
+            checks.check { retried = true; release() }
+            assertTrue(retried, "A failed check must be retried after an hour, not a day")
         }
     }
 

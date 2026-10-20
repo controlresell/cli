@@ -292,8 +292,8 @@ jobs:
           retention-days: 7
   signed_bundle:
     timeout-minutes: 5
-    # Pull-request code never receives the publisher key, including same-repository PRs.
-    if: github.event_name != 'pull_request'
+    # Only tags and main receive the publisher key: never pull-request code, nor a branch run by workflow_dispatch.
+    if: github.event_name != 'pull_request' && (github.ref_type == 'tag' || github.ref == 'refs/heads/main')
     needs: [bundle]
     runs-on: ubuntu-latest
     steps:

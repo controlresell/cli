@@ -66,5 +66,9 @@ internal suspend fun dispatchInstalled(arguments: Array<String>): Boolean {
     SystemExit.exit(executeInstalledPayload(store.paths.binary(selected).toString(), arguments.toList(), store.paths.root.toString()))
 }
 
-/** Held shared for the whole command by every cr of a managed installation, so that an activation never swaps its payload. */
-internal fun commandInstallationLease(): InstallationLock? = managedInstallation()?.lock(exclusive = false)
+/**
+ * Held shared for the whole command by every cr of a managed installation, so that an activation never swaps its payload.
+ * Best effort: a damaged record or an activation in progress must not block an API command, nor `cr update` that repairs it.
+ */
+internal fun commandInstallationLease(): InstallationLock? =
+    try { managedInstallation()?.lock(exclusive = false) } catch (_: CliOperationException) { null }
