@@ -23,9 +23,16 @@ user's application data and prints the launcher directory to add to `PATH`. Set 
 another directory, or `CONTROLRESELL_INSTALL_BUNDLE` to install from a downloaded release directory without network
 access. Running the installer again keeps your saved login.
 
+The installer runs `cr install`, which you can also run yourself: `--version` picks a release, `--bundle DIR` installs a
+downloaded release directory, `--root DIR` chooses the directory. The default directory is
+`~/Library/Application Support/ControlResell` on macOS, `~/.local/share/controlresell` on Linux and
+`%LOCALAPPDATA%\ControlResell` on Windows. To uninstall, run `cr update --automatic uninstall` if you enabled automatic
+updates, then delete that directory, and `~/.config/controlresell` to remove the saved login.
+
 ## Log in
 
-Create an API key in the ControlResell app, then pass it on standard input. It is checked with the API before it is
+Create an API key in the ControlResell app, with the scopes of the commands you use (`accounts:read`, `items:read`,
+`conversations:read`; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
 saved, and never appears in your shell history or in the process list:
 
 ```sh
@@ -36,8 +43,11 @@ cr logout           # removes the saved key; revoke the key itself in the app
 ```
 
 The key is saved in `$XDG_CONFIG_HOME/controlresell/config.json`, falling back to `~/.config/controlresell/config.json`
-(directory 0700, file 0600). In CI or scripts, set `CONTROLRESELL_API_KEY` instead: it takes precedence over the saved
-key, and no file is written. `cr login --api-url URL` targets another API origin; remote origins must use HTTPS.
+(`%USERPROFILE%\.config\controlresell\config.json` on Windows), readable only by you: directory 0700 and file 0600 on
+macOS and Linux, a private access list on Windows. In CI or scripts, set `CONTROLRESELL_API_KEY` instead: it takes
+precedence over the saved key, and no file is written. `cr login --api-url URL` targets another API origin; remote
+origins must use HTTPS. The variable uses the origin saved by an earlier `cr login --api-url`, if any, and the default
+API otherwise; `cr logout` removes the file, not the variable.
 
 ## Commands
 
@@ -88,6 +98,7 @@ cr update --check          # compare with the latest signed release
 cr update                  # install it
 cr update --version 0.2.0  # choose a version, including a downgrade
 cr update --rollback       # return to the previous version, without network access
+cr update --bundle DIR     # install a downloaded release directory
 ```
 
 On a terminal, `cr` mentions on standard error when a newer release exists; `cr update --notifications off` disables
