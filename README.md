@@ -19,7 +19,7 @@ curl -fsSL https://github.com/controlresell/cli/releases/download/VERSION/instal
 ```
 
 The installer verifies the release signature against the public key embedded in the executable, installs it in your
-user's application data and prints the launcher directory to add to `PATH`. Set `CONTROLRESELL_INSTALL_ROOT` to choose
+user's application data and makes `cr` available by name (a `~/.local/bin` link on macOS/Linux, your user PATH on Windows). Set `CONTROLRESELL_INSTALL_ROOT` to choose
 another directory, or `CONTROLRESELL_INSTALL_BUNDLE` to install from a downloaded release directory without network
 access. Running the installer again keeps your saved login.
 
@@ -28,6 +28,15 @@ downloaded release directory, `--root DIR` chooses the directory. The default di
 `~/Library/Application Support/ControlResell` on macOS, `~/.local/share/controlresell` on Linux and
 `%LOCALAPPDATA%\ControlResell` on Windows. To uninstall, run `cr update --automatic uninstall` if you enabled automatic
 updates, then delete that directory, and `~/.config/controlresell` to remove the saved login.
+
+The command needs no `sudo` or administrator rights. On macOS and Linux it is a symbolic link `~/.local/bin/cr` to the
+stable launcher (`<root>/bin/cr`), never to a versioned payload, so updates and rollback need no relinking; when
+`~/.local/bin` is not in your `PATH`, the installer prints the exact line to add (`export PATH="$HOME/.local/bin:$PATH"`)
+and never edits your shell profile. On Windows the launcher directory is appended to your user PATH
+(`HKCU\Environment`); open a new terminal to see it. Running the installer again changes nothing, and it never overwrites
+a file or link it did not create: if `~/.local/bin/cr` is something else, the installation finishes, nothing is replaced
+and the installer exits with an error. `cr install --no-path` (not available through the install scripts) skips this
+step. To undo it, delete `~/.local/bin/cr` (macOS/Linux) or remove the launcher directory from your user PATH (Windows).
 
 ## Log in
 

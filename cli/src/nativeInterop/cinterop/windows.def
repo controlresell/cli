@@ -1,3 +1,3 @@
 headers = windows_support.h
 package = com.controlresell.cli.interop.windows
-linkerOpts = -ladvapi32 -lbcrypt -lshell32 -lcrypt32
+linkerOpts = -ladvapi32 -lbcrypt -lshell32 -lcrypt32 -luser32
