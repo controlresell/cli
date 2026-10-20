@@ -93,7 +93,7 @@ def main():
         return run([launcher, 'version']).stdout.decode().strip().removeprefix('ControlResell CLI ')
 
     try:
-        run([binary, 'install', '--bundle', first, '--root', root])
+        run([binary, 'install', '--no-path', '--bundle', first, '--root', root])
         assert run([launcher, 'version']).stdout.decode().strip() == 'ControlResell CLI ' + old['version']
         run([launcher, 'update', '--notifications', 'off'])
         config_path.parent.mkdir(parents=True)

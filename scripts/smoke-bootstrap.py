@@ -62,8 +62,30 @@ def main():
                     run([shell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
                          str(Path(__file__).resolve().parent / 'fixtures/bootstrap-http.ps1'), '-Template', str(script)])
 
+                if os.name == 'nt':
+                    import atexit, winreg
+                    def user_path():
+                        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment') as key:
+                            try: return winreg.QueryValueEx(key, 'Path')
+                            except FileNotFoundError: return None
+                    original_user_path = user_path()
+                    def restore_user_path():
+                        # The Windows install edits the real HKCU PATH of the CI user: put it back exactly.
+                        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_SET_VALUE) as key:
+                            if original_user_path is None: winreg.DeleteValue(key, 'Path')
+                            else: winreg.SetValueEx(key, 'Path', 0, original_user_path[1], original_user_path[0])
+                    atexit.register(restore_user_path)
+
                 # A clean install needs no account, API key or network access to the API.
                 run(invoke)
+                # `cr` must work by name right after the install, in a PATH that has the command directory.
+                command_directory = install_root / 'bin' if os.name == 'nt' else home / '.local' / 'bin'
+                if os.name == 'nt':
+                    assert str(command_directory).lower() in [entry.rstrip('\\').lower() for entry in user_path()[0].split(';')]
+                else:
+                    assert (command_directory / 'cr').is_symlink() and os.path.realpath(command_directory / 'cr') == os.path.realpath(launcher)
+                by_name = shutil.which('cr', path=str(command_directory))
+                assert by_name and run([by_name, 'version']).stdout.decode().strip() == 'ControlResell CLI ' + manifest['version']
                 assert run([str(launcher), 'version']).stdout.decode().strip() == 'ControlResell CLI ' + manifest['version']
                 state = json.loads((install_root / 'current.json').read_bytes())
                 assert state['current']['manifestSha256'] == digest(bundle / 'manifest.json')
@@ -81,6 +103,7 @@ def main():
                 assert key.encode() not in result.stdout + result.stderr, 'Bootstrap printed the saved API key'
                 assert {path: path.read_bytes() for path in preserved} == before
                 assert digest(launcher) == launcher_hash, 'Idempotent bootstrap replaced the stable launcher'
+                if os.name != 'nt': assert os.path.realpath(command_directory / 'cr') == os.path.realpath(launcher) and len(list(command_directory.iterdir())) == 1
                 assert run([str(launcher), 'version']).stdout.decode().strip() == 'ControlResell CLI ' + manifest['version']
 
                 corrupt = root / 'corrupt'; corrupt.mkdir()
