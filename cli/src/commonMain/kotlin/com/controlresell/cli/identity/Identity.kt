@@ -19,7 +19,7 @@ internal class Login(private val environment: CliEnvironment) : SuspendingCliktC
     override fun help(context: Context) = "Save an API key read from stdin, after checking it with the API."
     override suspend fun run() {
         val store = environment.store()
-        val origin = validateApiUrl(apiUrl ?: store.load()?.apiUrl ?: ControlResell.DEFAULT_BASE_URL)
+        val origin = validateApiUrl(apiUrl ?: store.loadOrNull()?.apiUrl ?: ControlResell.DEFAULT_BASE_URL)
         echo("Create an API key in the ControlResell app, with the scopes of the commands you use " +
             "(accounts:read, items:read, conversations:read).", err = true)
         echo("API key (read from stdin; never pass secrets as command arguments): ", trailingNewline = false, err = true)

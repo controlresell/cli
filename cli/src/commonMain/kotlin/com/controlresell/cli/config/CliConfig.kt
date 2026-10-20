@@ -20,7 +20,7 @@ fun validateApiUrl(value: String): String {
     require(value.isNotBlank()) { "A ControlResell API URL is required." }
     val url = Url(value)
     require(url.protocol == URLProtocol.HTTPS ||
-        (url.protocol == URLProtocol.HTTP && url.host in setOf("localhost", "127.0.0.1", "::1"))) {
+        (url.protocol == URLProtocol.HTTP && url.host.lowercase() in setOf("localhost", "127.0.0.1", "::1", "[::1]"))) {
         "Use HTTPS; unencrypted HTTP is allowed only on loopback."
     }
     require(url.user.isNullOrEmpty() && url.password.isNullOrEmpty() && url.encodedPath in setOf("", "/") &&
@@ -47,6 +47,8 @@ class ConfigStore(private val path: String = configPath()) {
         return try { Serialization.json.decodeFromString<CliConfig>(FileSystem.SYSTEM.read(file) { readUtf8() }) }
         catch (_: IllegalArgumentException) { error("Cannot read the ControlResell configuration. Run cr login to replace it.") }
     }
+    /** [load], or null when the file is missing or unreadable: for callers that can do without it. */
+    fun loadOrNull(): CliConfig? = try { load() } catch (_: IllegalArgumentException) { null } catch (_: IllegalStateException) { null }
     fun delete() { FileSystem.SYSTEM.delete(path.toPath(), mustExist = false) }
     fun save(config: CliConfig) {
         writePrivateFile(path, Serialization.json.encodeToString(CliConfig.serializer(), config))

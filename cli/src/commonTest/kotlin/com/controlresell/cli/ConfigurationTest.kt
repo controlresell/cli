@@ -15,6 +15,8 @@ class ConfigurationTest {
         }
         assertEquals("https://api.controlresell.com", validateApiUrl("https://api.controlresell.com/"))
         assertEquals("http://127.0.0.1:8080", validateApiUrl("http://127.0.0.1:8080"))
+        assertEquals("http://LOCALHOST:8080", validateApiUrl("http://LOCALHOST:8080"))
+        assertEquals("http://[::1]:8080", validateApiUrl("http://[::1]:8080"))
     }
     @Test fun `configuration debug rendering redacts the API key`() {
         assertFalse(CliConfig("https://api.example", "cr_live_secret").toString().contains("cr_live_secret"))

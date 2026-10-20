@@ -29,13 +29,14 @@ class CliEnvironment(
 
     /** The saved configuration, with [API_KEY_VARIABLE] taking precedence over the saved key. */
     fun credentials(): CliConfig {
-        val saved = store().load()
         val key = variable(API_KEY_VARIABLE)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return saved ?: throw CliFailure(ExitCode.AUTHENTICATION, "Not signed in. Run cr login, or set $API_KEY_VARIABLE.")
-        return CliConfig(saved?.apiUrl ?: ControlResell.DEFAULT_BASE_URL, key)
+            ?: return store().load() ?: throw CliFailure(ExitCode.AUTHENTICATION, "Not signed in. Run cr login, or set $API_KEY_VARIABLE.")
+        // With the variable, the file only gives the API origin: an unreadable file must not block the key.
+        return CliConfig(store().loadOrNull()?.apiUrl ?: ControlResell.DEFAULT_BASE_URL, key)
     }
 
-    fun sdk(config: CliConfig = credentials()) = ControlResell(apiKey = config.apiKey, baseUrl = config.apiUrl, engine = engine, retry = retry)
+    fun sdk(config: CliConfig = credentials()) =
+        ControlResell(apiKey = config.apiKey, baseUrl = validateApiUrl(config.apiUrl), engine = engine, retry = retry)
 }
 
 class Cli(environment: CliEnvironment = CliEnvironment()) : SuspendingNoOpCliktCommand(name = "cr") {

@@ -33,6 +33,33 @@ class IdentityTest {
         assertContains(Files.readString(cli.configFile), "\"apiUrl\":\"http://127.0.0.1:8080\"")
     }
 
+    @Test fun `login replaces an unreadable configuration`() = runTest {
+        val cli = CliHarness()
+        Files.createDirectories(cli.configFile.parent)
+        Files.writeString(cli.configFile, "{\"apiUrl\":")
+        cli.on(HttpMethod.Get, "/api/public/v1/me", body = ME)
+        val result = cli.run("login", stdin = KEY)
+        assertEquals(0, result.code, result.stderr)
+        assertContains(Files.readString(cli.configFile), "\"apiKey\":\"$KEY\"")
+    }
+
+    @Test fun `the key variable works despite an unreadable configuration`() = runTest {
+        val cli = CliHarness(mapOf(API_KEY_VARIABLE to KEY))
+        Files.createDirectories(cli.configFile.parent)
+        Files.writeString(cli.configFile, "not json")
+        cli.on(HttpMethod.Get, "/api/public/v1/me", body = ME)
+        assertEquals(0, cli.run("whoami").code)
+        assertEquals("https://api.controlresell.com/api/public/v1/me", cli.requests.single().url.toString())
+    }
+
+    @Test fun `a saved origin with a trailing slash is normalized`() = runTest {
+        val cli = CliHarness()
+        cli.signIn(apiUrl = "http://127.0.0.1:8080/")
+        cli.on(HttpMethod.Get, "/api/public/v1/me", body = ME)
+        assertEquals(0, cli.run("whoami").code)
+        assertEquals("http://127.0.0.1:8080/api/public/v1/me", cli.requests.single().url.toString())
+    }
+
     @Test fun `a rejected key is never saved`() = runTest {
         val cli = CliHarness()
         cli.on(HttpMethod.Get, "/api/public/v1/me", status = 401, body = CliHarness.error("invalid_token", "The API key is invalid or revoked."))
