@@ -1,7 +1,10 @@
 package com.controlresell.cli
 
+import com.controlresell.cli.accounts.Accounts
 import com.controlresell.cli.config.*
+import com.controlresell.cli.conversations.Conversations
 import com.controlresell.cli.identity.*
+import com.controlresell.cli.items.Items
 import com.controlresell.cli.platform.*
 import com.controlresell.sdk.ControlResell
 import com.controlresell.sdk.ControlResellConnectionException
@@ -41,7 +44,10 @@ class CliEnvironment(
 
 class Cli(environment: CliEnvironment = CliEnvironment()) : SuspendingNoOpCliktCommand(name = "cr") {
     override fun help(context: Context) = "The ControlResell command line. First use: cr login."
-    init { subcommands(Login(environment), Logout(environment), WhoAmI(environment), Version()) }
+    init {
+        subcommands(Login(environment), Logout(environment), WhoAmI(environment), Accounts(environment), Items(environment),
+            Conversations(environment), Version())
+    }
 }
 
 private class Version : SuspendingCliktCommand(name = "version") {
