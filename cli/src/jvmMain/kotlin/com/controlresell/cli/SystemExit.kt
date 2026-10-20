@@ -6,4 +6,5 @@ actual object SystemExit {
         System.err.println(message)
         kotlin.system.exitProcess(code)
     }
+    actual fun notice(message: String) = System.err.println(message)
 }

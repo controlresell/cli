@@ -12,6 +12,26 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+/* SubjectPublicKeyInfo import uses Crypt32; signature verification stays in BCrypt. */
+static inline int controlresell_release_verify(const unsigned char *spki, size_t spki_size,
+        const unsigned char *pkcs1, size_t pkcs1_size, const unsigned char *digest, size_t digest_size,
+        const unsigned char *signature, size_t signature_size) {
+    if (!spki || spki_size == 0 || spki_size > 2048 || digest_size != 32 || signature_size != 384) return 0;
+    CERT_PUBLIC_KEY_INFO *information = NULL;
+    DWORD size = 0;
+    if (!CryptDecodeObjectEx(X509_ASN_ENCODING, X509_PUBLIC_KEY_INFO, spki, (DWORD)spki_size,
+            CRYPT_DECODE_ALLOC_FLAG, NULL, &information, &size)) return 0;
+    BCRYPT_KEY_HANDLE key = NULL;
+    BOOL imported = CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, information, 0, NULL, &key);
+    LocalFree(information);
+    if (!imported) return 0;
+    BCRYPT_PSS_PADDING_INFO padding = {BCRYPT_SHA256_ALGORITHM, 32};
+    NTSTATUS result = BCryptVerifySignature(key, &padding, (PUCHAR)digest, 32,
+        (PUCHAR)signature, 384, BCRYPT_PAD_PSS);
+    BCryptDestroyKey(key);
+    return result == 0;
+}
+
 static inline wchar_t **controlresell_windows_arguments(int *count) { return CommandLineToArgvW(GetCommandLineW(), count); }
 
 static inline int controlresell_windows_random(void *buffer, unsigned long count) {
@@ -121,4 +141,152 @@ cleanup:
     return success ? 0 : stage;
 }
 
+static inline int controlresell_windows_install_private_path(const wchar_t *path, int directory) {
+    DWORD flags = GetFileAttributesW(path);
+    if (flags == INVALID_FILE_ATTRIBUTES || (flags & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        (((flags & FILE_ATTRIBUTE_DIRECTORY) != 0) != (directory != 0))) return 0;
+    wchar_t *text = controlresell_windows_user_sid();
+    PSID expected = NULL, owner = NULL;
+    PACL dacl = NULL;
+    PSECURITY_DESCRIPTOR descriptor = NULL;
+    int valid = text && ConvertStringSidToSidW(text, &expected) &&
+        GetNamedSecurityInfoW((wchar_t *)path, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &owner, NULL, &dacl, NULL, &descriptor) == ERROR_SUCCESS && owner && EqualSid(owner, expected) && dacl && dacl->AceCount == 1;
+    if (valid) {
+        ACCESS_ALLOWED_ACE *ace = NULL;
+        valid = GetAce(dacl, 0, (void **)&ace) && ace && ace->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
+            EqualSid((PSID)&ace->SidStart, expected);
+    }
+    if (descriptor) LocalFree(descriptor);
+    if (expected) LocalFree(expected);
+    if (text) LocalFree(text);
+    return valid;
+}
+static inline int controlresell_windows_install_owned(HANDLE file) {
+    BY_HANDLE_FILE_INFORMATION information;
+    if (!GetFileInformationByHandle(file, &information) || information.nNumberOfLinks != 1 ||
+        (information.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))) return 0;
+    wchar_t *text = controlresell_windows_user_sid();
+    PSID expected = NULL, actual = NULL;
+    PSECURITY_DESCRIPTOR descriptor = NULL;
+    int valid = text && ConvertStringSidToSidW(text, &expected) &&
+        GetSecurityInfo(file, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,
+            &actual, NULL, NULL, NULL, &descriptor) == ERROR_SUCCESS && actual && EqualSid(actual, expected);
+    if (descriptor) LocalFree(descriptor);
+    if (expected) LocalFree(expected);
+    if (text) LocalFree(text);
+    return valid;
+}
+/* Share the persistent file; only the one-byte lock region controls shared/exclusive access. */
+static inline int controlresell_windows_install_lock(const wchar_t *path, int exclusive, void **handle) {
+    PSECURITY_DESCRIPTOR descriptor = controlresell_windows_private_descriptor();
+    if (!descriptor) return -1;
+    SECURITY_ATTRIBUTES attributes = { sizeof(SECURITY_ATTRIBUTES), descriptor, FALSE };
+    HANDLE file = CreateFileW(path, GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, &attributes, OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    LocalFree(descriptor);
+    if (file == INVALID_HANDLE_VALUE) return -1;
+    if (!controlresell_windows_install_owned(file)) { CloseHandle(file); return -1; }
+    OVERLAPPED position = {0};
+    if (!LockFileEx(file, LOCKFILE_FAIL_IMMEDIATELY | (exclusive ? LOCKFILE_EXCLUSIVE_LOCK : 0), 0, 1, 0, &position)) {
+        DWORD error = GetLastError();
+        CloseHandle(file);
+        return error == ERROR_LOCK_VIOLATION ? 0 : -1;
+    }
+    *handle = file;
+    return 1;
+}
+static inline void controlresell_windows_install_unlock(void *handle) { CloseHandle((HANDLE)handle); }
+static inline int controlresell_windows_install_seal(const wchar_t *path) {
+    HANDLE file = CreateFileW(path, GENERIC_READ | GENERIC_WRITE | READ_CONTROL, FILE_SHARE_READ,
+        NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (file == INVALID_HANDLE_VALUE) return -1;
+    int valid = controlresell_windows_install_owned(file) && FlushFileBuffers(file);
+    CloseHandle(file);
+    return valid ? 0 : -1;
+}
+
+/* Duplicate only standard streams; do not make arbitrary parent handles inheritable. */
+static inline HANDLE controlresell_windows_standard(DWORD kind, int quiet) {
+    HANDLE result = NULL;
+    if (quiet && kind != STD_INPUT_HANDLE) {
+        SECURITY_ATTRIBUTES attributes = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+        return CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &attributes, OPEN_EXISTING, 0, NULL);
+    }
+    HANDLE source = GetStdHandle(kind);
+    if (!source || source == INVALID_HANDLE_VALUE) {
+        SECURITY_ATTRIBUTES attributes = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+        return CreateFileW(L"NUL", kind == STD_INPUT_HANDLE ? GENERIC_READ : GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, &attributes, OPEN_EXISTING, 0, NULL);
+    }
+    if (!DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(), &result, 0, TRUE, DUPLICATE_SAME_ACCESS)) return NULL;
+    return result;
+}
+
+typedef struct {
+    HANDLE process;
+    HANDLE job;
+} controlresell_windows_child;
+
+/* A private job owns only this child and its descendants, including its own subprocesses.
+ * Assign before resuming so no descendant can escape between process creation and job assignment. */
+static inline void *controlresell_windows_spawn(const wchar_t *application, wchar_t *command_line,
+        const wchar_t *environment, int quiet) {
+    STARTUPINFOEXW startup = {0};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    HANDLE handles[3] = { controlresell_windows_standard(STD_INPUT_HANDLE, quiet),
+        controlresell_windows_standard(STD_OUTPUT_HANDLE, quiet), controlresell_windows_standard(STD_ERROR_HANDLE, quiet) };
+    PROCESS_INFORMATION process = {0};
+    SIZE_T size = 0;
+    int initialized = 0;
+    controlresell_windows_child *child = NULL;
+    HANDLE job = CreateJobObjectW(NULL, NULL);
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {0};
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (!job || !SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) goto cleanup;
+    for (int i = 0; i < 3; i++) if (!handles[i] || handles[i] == INVALID_HANDLE_VALUE) goto cleanup;
+    startup.StartupInfo.hStdInput = handles[0];
+    startup.StartupInfo.hStdOutput = handles[1];
+    startup.StartupInfo.hStdError = handles[2];
+    InitializeProcThreadAttributeList(NULL, 1, 0, &size);
+    startup.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)malloc(size);
+    if (!startup.lpAttributeList || !InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &size)) goto cleanup;
+    initialized = 1;
+    if (!UpdateProcThreadAttribute(startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        handles, sizeof(handles), NULL, NULL)) goto cleanup;
+    if (!CreateProcessW(application, command_line, NULL, NULL, TRUE,
+        CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED, (void *)environment, NULL,
+        &startup.StartupInfo, &process)) goto cleanup;
+    if (!AssignProcessToJobObject(job, process.hProcess)) goto cleanup;
+    child = (controlresell_windows_child *)calloc(1, sizeof(controlresell_windows_child));
+    if (!child) goto cleanup;
+    if (ResumeThread(process.hThread) == (DWORD)-1) { free(child); child = NULL; goto cleanup; }
+    child->process = process.hProcess;
+    child->job = job;
+cleanup:
+    if (!child && process.hProcess) { TerminateProcess(process.hProcess, 130); CloseHandle(process.hProcess); }
+    if (!child && job) CloseHandle(job);
+    if (process.hThread) CloseHandle(process.hThread);
+    if (initialized) DeleteProcThreadAttributeList(startup.lpAttributeList);
+    free(startup.lpAttributeList);
+    for (int i = 0; i < 3; i++) if (handles[i] && handles[i] != INVALID_HANDLE_VALUE) CloseHandle(handles[i]);
+    return child;
+}
+static inline int controlresell_windows_poll(void *process, unsigned long *code) {
+    controlresell_windows_child *child = (controlresell_windows_child *)process;
+    DWORD status = WaitForSingleObject(child->process, 0);
+    if (status == WAIT_TIMEOUT) return 0;
+    if (status != WAIT_OBJECT_0 || !GetExitCodeProcess(child->process, code)) return -1;
+    return 1;
+}
+static inline void controlresell_windows_close(void *process) {
+    controlresell_windows_child *child = (controlresell_windows_child *)process;
+    CloseHandle(child->process);
+    CloseHandle(child->job);
+    free(child);
+}
+static inline void controlresell_windows_terminate(void *process) {
+    TerminateJobObject(((controlresell_windows_child *)process)->job, 130);
+}
 #endif
