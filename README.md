@@ -8,20 +8,23 @@ macOS, Linux and Windows, built with Kotlin Multiplatform on the ControlResell K
 
 ## Install
 
-Each release ships signed, version-pinned installers. Replace `VERSION` with the release you want:
+Each release ships signed, version-pinned installers. These commands install the latest release:
 
 ```sh
-curl -fsSL https://github.com/controlresell/cli/releases/download/VERSION/install.sh | sh
+curl -fsSL https://github.com/controlresell/cli/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://github.com/controlresell/cli/releases/download/VERSION/install.ps1').Content))
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://github.com/controlresell/cli/releases/latest/download/install.ps1').Content))
 ```
 
 The installer verifies the release signature against the public key embedded in the executable, installs it in your
 user's application data and makes `cr` available by name (a `~/.local/bin` link on macOS/Linux, your user PATH on Windows). Set `CONTROLRESELL_INSTALL_ROOT` to choose
 another directory, or `CONTROLRESELL_INSTALL_BUNDLE` to install from a downloaded release directory without network
 access. Running the installer again keeps your saved login.
+
+The script you download is pinned to the release it comes from, so every file it fetches matches that exact version. To
+install a specific version, replace `releases/latest/download/` with `releases/download/<version>/`.
 
 The installer runs `cr install`, which you can also run yourself: `--version` picks a release, `--bundle DIR` installs a
 downloaded release directory, `--root DIR` chooses the directory. The default directory is
