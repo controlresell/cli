@@ -18,7 +18,7 @@ import io.ktor.client.statement.bodyAsText
 internal class Orders(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "orders") {
     override fun help(context: Context) = "The seller's sales and purchases."
     init {
-        subcommands(ListOrders(environment), GetOrder(environment), OrderLabels(environment))
+        subcommands(ListOrders(environment), GetOrder(environment), OrderLabels(environment), LabelsToShip(environment))
     }
 }
 
@@ -72,6 +72,22 @@ private class OrderLabels(private val environment: CliEnvironment) : SuspendingC
         echo(terminal.table(listOf("ID", "Carrier", "Created", "URL"), response.body().`data`.map { label: OrderLabel ->
             listOf(label.id, label.carrier, date(label.createdAt), label.url)
         }, empty = "This order has no label."))
+    }
+}
+
+private class LabelsToShip(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "labels-to-ship") {
+    private val paging by Paging()
+    private val json by option("--json", help = "Print the API's JSON response.").flag()
+    override fun help(context: Context) =
+        "List the shipping labels still to ship over all your orders, the oldest order first. The links are signed and expire: run the command again rather than keeping them. Needs the orders:read scope."
+    override suspend fun run() = environment.sdk().use { client ->
+        printList(paging, json, fetch = { cursor, limit ->
+            fetchPage(client.orders.listLabelsToShip(limit = limit, cursor = cursor), { it.`data` }, { it.nextCursor }, json)
+        }, render = { labels ->
+            terminal.table(listOf("ID", "Order", "Carrier", "Created", "URL"), labels.map { label: OrderLabel ->
+                listOf(label.id, label.orderId, label.carrier, date(label.createdAt), label.url)
+            }, empty = "No label to ship.")
+        })
     }
 }
 

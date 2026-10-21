@@ -150,4 +150,18 @@ class ReadCommandsTest {
         assertEquals("ONLINE", Json.parseToJsonElement(cli.run("items", "listings", "7", "--json").stdout)
             .jsonObject["data"]!!.jsonArray.single().jsonObject["status"]!!.jsonPrimitive.content)
     }
+
+    @Test fun `conversations list and messages send the from and to window, and refuse a bad one`() = runTest {
+        val cli = CliHarness().apply { signIn() }
+        cli.on(HttpMethod.Get, "/api/public/v1/conversations", body = """{"data":[],"nextCursor":null}""")
+        cli.on(HttpMethod.Get, "/api/public/v1/conversations/conv_1/messages", body = """{"data":[],"nextCursor":null}""")
+        assertEquals(0, cli.run("conversations", "list", "--from", "2026-10-01T00:00:00Z", "--to", "2026-10-02T00:00:00Z").code)
+        assertEquals(0, cli.run("conversations", "messages", "conv_1", "--from", "2026-10-01T00:00:00Z").code)
+        cli.requests[0].url.parameters.let { assertTrue(it["from"]!!.startsWith("2026-10-01")); assertTrue(it["to"]!!.startsWith("2026-10-02")) }
+        cli.requests[1].url.parameters.let { assertTrue(it["from"]!!.startsWith("2026-10-01")); assertNull(it["to"]) }
+        val count = cli.requests.size
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "list", "--from", "2026-10-02T00:00:00Z", "--to", "2026-10-01T00:00:00Z").code)
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "messages", "conv_1", "--to", "yesterday").code)
+        assertEquals(count, cli.requests.size)
+    }
 }

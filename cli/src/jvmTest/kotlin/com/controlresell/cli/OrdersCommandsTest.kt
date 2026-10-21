@@ -8,7 +8,7 @@ import kotlin.test.*
 class OrdersCommandsTest {
     private fun order(n: Int) = """{"id":"o_$n","accountId":"acc_1","type":"SALE","status":"PAID","platformOrderId":"p$n",""" +
         """"price":{"amount":"12.50","currency":"EUR"},"prepared":false,"date":"2026-10-21T10:00:00Z","items":[{"listingId":"l_1","itemId":7}]}"""
-    private val labels = """{"data":[{"id":"lb_1","carrier":"Colissimo","url":"https://labels.example/lb_1.pdf","createdAt":"2026-10-21T11:00:00Z"}],"nextCursor":null}"""
+    private val labels = """{"data":[{"id":"lb_1","orderId":"o_1","carrier":"Colissimo","url":"https://labels.example/lb_1.pdf","createdAt":"2026-10-21T11:00:00Z"}],"nextCursor":null}"""
 
     private fun signedIn() = CliHarness().apply { signIn() }
 
@@ -81,6 +81,19 @@ class OrdersCommandsTest {
         assertContains(result.stdout, "https://labels.example/lb_1.pdf")
         assertEquals("This order has no label.\n", cli.run("orders", "labels", "o_2").stdout)
         assertEquals("$labels\n", cli.run("orders", "labels", "o_1", "--json").stdout)
+    }
+
+    @Test fun `orders labels-to-ship lists the labels of every order and follows the cursor with --all`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Get, "/api/public/v1/orders/labels", body = labels.replace("null}", "\"c2\"}"), query = mapOf("cursor" to null))
+        cli.on(HttpMethod.Get, "/api/public/v1/orders/labels", body = labels.replace("lb_1", "lb_2"), query = mapOf("cursor" to "c2"))
+        val table = cli.run("orders", "labels-to-ship", "--limit", "1")
+        assertEquals(0, table.code, table.stderr)
+        assertContains(table.stdout, "lb_1")
+        assertContains(table.stdout, "o_1")
+        assertEquals("Next page: run the same command with --cursor c2\n", table.stderr)
+        val all = Json.parseToJsonElement(cli.run("orders", "labels-to-ship", "--all", "--json").stdout).jsonObject
+        assertEquals(listOf("lb_1", "lb_2"), all["data"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content })
     }
 
     @Test fun `a missing orders scope exits with 3`() = runTest {

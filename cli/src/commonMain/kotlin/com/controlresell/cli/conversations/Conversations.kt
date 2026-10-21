@@ -30,18 +30,23 @@ internal class Conversations(environment: CliEnvironment) : SuspendingNoOpCliktC
 private class ListConversations(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "list") {
     private val unread by option("--unread", help = "true: only unread conversations; false: only read ones.").boolean()
     private val account by option("--account", help = "Only the conversations of this marketplace account.")
+    private val from by option("--from", help = "Only the conversations whose last message is at or after this instant (inclusive), ISO-8601 with its offset, such as 2026-10-01T00:00:00Z.")
+    private val to by option("--to", help = "Only the conversations whose last message is before this instant (exclusive), ISO-8601 with its offset.")
     private val paging by Paging()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the conversations, most recently updated first."
-    override suspend fun run() = environment.sdk().use { client ->
+    override suspend fun run() {
+        val (start, end) = window(from, to)
+        environment.sdk().use { client ->
         printList(paging, json, fetch = { cursor, limit ->
-            fetchPage(client.conversations.listConversations(limit = limit, cursor = cursor, unread = unread, accountId = account),
-                { it.`data` }, { it.nextCursor }, json)
+            fetchPage(client.conversations.listConversations(limit = limit, cursor = cursor, unread = unread, accountId = account,
+                from = start, to = end), { it.`data` }, { it.nextCursor }, json)
         }, render = { conversations ->
             terminal.table(listOf("ID", "Account", "Buyer", "Unread", "Last message", "Updated"), conversations.map {
                 listOf(it.id, it.accountId, it.buyerLogin, if (it.unread) "yes" else "no", short(it.lastMessage?.let(::text)), date(it.updatedAt))
             }, empty = "No conversations.")
         })
+        }
     }
 }
 
@@ -57,18 +62,23 @@ private class GetConversation(private val environment: CliEnvironment) : Suspend
 
 private class ConversationMessages(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "messages") {
     private val id by argument(help = "The conversation's identifier.")
+    private val from by option("--from", help = "Only the messages created at or after this instant (inclusive), ISO-8601 with its offset, such as 2026-10-01T00:00:00Z.")
+    private val to by option("--to", help = "Only the messages created before this instant (exclusive), ISO-8601 with its offset.")
     private val paging by Paging()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the messages of a conversation."
-    override suspend fun run() = environment.sdk().use { client ->
+    override suspend fun run() {
+        val (start, end) = window(from, to)
+        environment.sdk().use { client ->
         printList(paging, json, fetch = { cursor, limit ->
-            fetchPage(client.conversations.listConversationMessages(id = id, limit = limit, cursor = cursor),
+            fetchPage(client.conversations.listConversationMessages(id = id, limit = limit, cursor = cursor, from = start, to = end),
                 { it.`data` }, { it.nextCursor }, json)
         }, render = { messages ->
             terminal.table(listOf("ID", "Author", "Type", "Status", "Sent", "Text"), messages.map {
                 listOf(it.id, it.author, it.type, it.status, date(it.createdAt), short(text(it), 60))
             }, empty = "No messages.")
         })
+        }
     }
 }
 
