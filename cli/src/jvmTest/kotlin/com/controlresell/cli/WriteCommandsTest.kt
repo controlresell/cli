@@ -187,6 +187,8 @@ class WriteCommandsTest {
         assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--estimated-price", "12,50").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--estimated-price", "1", "--currency", "euro").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--selling-date", "yesterday").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--currency", "euro").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--label", "").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "update", "7").code)
         assertEquals(ExitCode.USAGE, cli.run("items", "update", "7", "--name", "").code)
         assertTrue(cli.requests.isEmpty())

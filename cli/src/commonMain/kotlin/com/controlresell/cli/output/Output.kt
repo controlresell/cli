@@ -14,3 +14,8 @@ internal fun sheet(vararg rows: Pair<String, String?>): String {
 internal fun money(value: Money?): String? = value?.let { "${printable(it.amount)} ${printable(it.currency)}" }
 
 internal fun date(value: Instant?): String? = value?.toString()
+
+/** An ISO-8601 instant with its offset, or a usage error naming [option]. */
+internal fun parseInstant(option: String, value: String): Instant =
+    try { Instant.parse(value) }
+    catch (_: IllegalArgumentException) { throw com.github.ajalt.clikt.core.UsageError("$option must be an ISO-8601 instant with its offset, such as 2026-10-01T00:00:00Z.") }

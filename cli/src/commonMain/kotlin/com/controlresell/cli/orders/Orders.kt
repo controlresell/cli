@@ -14,7 +14,6 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
 import io.ktor.client.statement.bodyAsText
-import kotlin.time.Instant
 
 internal class Orders(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "orders") {
     override fun help(context: Context) = "The seller's sales and purchases."
@@ -36,8 +35,8 @@ private class ListOrders(private val environment: CliEnvironment) : SuspendingCl
     override fun help(context: Context) = "List the orders, most recent first. Needs the orders:read scope."
     override suspend fun run() {
         if (bucket != null && bucket !in BUCKETS) throw UsageError("--bucket must be to_send or to_pickup.")
-        val start = from?.let { instant("--from", it) }
-        val end = to?.let { instant("--to", it) }
+        val start = from?.let { parseInstant("--from", it) }
+        val end = to?.let { parseInstant("--to", it) }
         if (start != null && end != null && end <= start) throw UsageError("--to must be after --from.")
         environment.sdk().use { client ->
             printList(paging, json, fetch = { cursor, limit ->
@@ -51,10 +50,6 @@ private class ListOrders(private val environment: CliEnvironment) : SuspendingCl
         }
     }
 }
-
-private fun instant(option: String, value: String): Instant =
-    try { Instant.parse(value) }
-    catch (_: IllegalArgumentException) { throw UsageError("$option must be an ISO-8601 instant with its offset, such as 2026-10-01T00:00:00Z.") }
 
 private class GetOrder(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "get") {
     private val id by argument(help = "The order's identifier.")

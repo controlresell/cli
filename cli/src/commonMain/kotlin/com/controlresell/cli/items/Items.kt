@@ -102,13 +102,35 @@ private class ItemFields : OptionGroup() {
     fun amount(option: String, value: String?): Money? {
         if (value == null) return null
         if (!AMOUNT.matches(value)) throw UsageError("$option must be a decimal number with at most 2 decimals, such as 12.50.")
-        if (!Regex("[A-Za-z]{3}").matches(currency)) throw UsageError("--currency must be a three-letter code such as EUR.")
         return Money(amount = value, currency = currency.uppercase())
     }
 
-    fun instant(option: String, value: String?): Instant? = value?.let {
-        try { Instant.parse(it) }
-        catch (_: IllegalArgumentException) { throw UsageError("$option must be an ISO-8601 instant with its offset, such as 2026-10-01T00:00:00Z.") }
+    fun instant(option: String, value: String?): Instant? = value?.let { parseInstant(option, it) }
+
+    fun toCreate(name: String) = ItemCreateRequest(
+        name = name, sku = sku, description = description, photoIds = photoIds.takeIf { it.isNotEmpty() },
+        categoryId = categoryId, brandId = brandId, sizeId = sizeId, colorIds = colorIds.takeIf { it.isNotEmpty() },
+        state = state, sex = sex, labels = labels.takeIf { it.isNotEmpty() }, sold = sold,
+        estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
+        purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
+        sellingDate = instant("--selling-date", sellingDate),
+    )
+
+    fun toUpdate(name: String?) = ItemUpdateRequest(
+        name = name, sku = sku, description = description, photoIds = photoIds.takeIf { it.isNotEmpty() },
+        categoryId = categoryId, brandId = brandId, sizeId = sizeId, colorIds = colorIds.takeIf { it.isNotEmpty() },
+        state = state, sex = sex, labels = labels.takeIf { it.isNotEmpty() }, sold = sold,
+        estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
+        purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
+        sellingDate = instant("--selling-date", sellingDate),
+    )
+
+    /** Checks the values that need no price to be wrong, before any request. */
+    fun check() {
+        if (!Regex("[A-Za-z]{3}").matches(currency)) throw UsageError("--currency must be a three-letter code such as EUR.")
+        if (sku?.isBlank() == true) throw UsageError("--sku cannot be empty.")
+        if (labels.any { it.isBlank() }) throw UsageError("--label cannot be empty.")
+        if (photoIds.any { it.isBlank() }) throw UsageError("--photo-id cannot be empty.")
     }
 }
 
@@ -123,17 +145,8 @@ private class CreateItem(private val environment: CliEnvironment) : SuspendingCl
         "Add an item to your stock, unsold and not published (publish it with cr items publish). Needs the items:write scope."
     override suspend fun run() {
         if (name.isBlank()) throw UsageError("--name cannot be empty.")
-        val request = ItemCreateRequest(
-            name = name, sku = fields.sku, description = fields.description, photoIds = fields.photoIds.takeIf { it.isNotEmpty() },
-            categoryId = fields.categoryId, brandId = fields.brandId, sizeId = fields.sizeId,
-            colorIds = fields.colorIds.takeIf { it.isNotEmpty() }, state = fields.state, sex = fields.sex,
-            labels = fields.labels.takeIf { it.isNotEmpty() }, sold = fields.sold,
-            estimatedPrice = fields.amount("--estimated-price", fields.estimatedPrice),
-            purchasePrice = fields.amount("--purchase-price", fields.purchasePrice),
-            purchaseDate = fields.instant("--purchase-date", fields.purchaseDate),
-            sellingPrice = fields.amount("--selling-price", fields.sellingPrice),
-            sellingDate = fields.instant("--selling-date", fields.sellingDate),
-        )
+        fields.check()
+        val request = fields.toCreate(name)
         environment.sdk().use { client ->
             val response = client.items.createItem(write.key(), request)
             if (json) echo(response.response.bodyAsText().trim()) else echo(item(response.body()))
@@ -152,17 +165,8 @@ private class UpdateItem(private val environment: CliEnvironment) : SuspendingCl
     override suspend fun run() {
         if (name != null && name!!.isBlank()) throw UsageError("--name cannot be empty.")
         if (name == null && !fields.any) throw UsageError("Give at least one field to change, such as --name or --estimated-price.")
-        val request = ItemUpdateRequest(
-            name = name, sku = fields.sku, description = fields.description, photoIds = fields.photoIds.takeIf { it.isNotEmpty() },
-            categoryId = fields.categoryId, brandId = fields.brandId, sizeId = fields.sizeId,
-            colorIds = fields.colorIds.takeIf { it.isNotEmpty() }, state = fields.state, sex = fields.sex,
-            labels = fields.labels.takeIf { it.isNotEmpty() }, sold = fields.sold,
-            estimatedPrice = fields.amount("--estimated-price", fields.estimatedPrice),
-            purchasePrice = fields.amount("--purchase-price", fields.purchasePrice),
-            purchaseDate = fields.instant("--purchase-date", fields.purchaseDate),
-            sellingPrice = fields.amount("--selling-price", fields.sellingPrice),
-            sellingDate = fields.instant("--selling-date", fields.sellingDate),
-        )
+        fields.check()
+        val request = fields.toUpdate(name)
         environment.sdk().use { client ->
             val response = client.items.updateItem(id, request)
             if (json) echo(response.response.bodyAsText().trim()) else echo(item(response.body()))
