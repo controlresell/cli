@@ -138,4 +138,67 @@ class WriteCommandsTest {
         cli.on(HttpMethod.Post, "/api/public/v1/conversations/c_1/messages", status = 403, body = CliHarness.error("insufficient_scope", "Missing scope"))
         assertEquals(ExitCode.AUTHENTICATION, cli.run("conversations", "send", "c_1", "--text", "x").code)
     }
+
+    private val created = """{"id":7,"name":"Jacket","photos":[],"colorIds":[],"labels":["denim"],"sold":false,"createdAt":"2026-10-21T10:00:00Z","updatedAt":"2026-10-21T10:00:00Z","estimatedPrice":{"amount":"12.50","currency":"EUR"}}"""
+
+    @Test fun `items create posts the fields with an idempotency key and prints the item`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Post, "/api/public/v1/items", status = 201, body = created)
+        val result = cli.run("items", "create", "--name", "Jacket", "--estimated-price", "12.50", "--label", "denim", "--label", "vintage",
+            "--color-id", "3", "--sold", "false", "--purchase-date", "2026-10-01T00:00:00Z", "--idempotency-key", "my-key")
+        assertEquals(0, result.code, result.stderr)
+        assertContains(result.stdout, "Jacket")
+        val request = cli.requests.single()
+        assertEquals("my-key", request.headers["Idempotency-Key"])
+        val sent = request.json()
+        assertEquals("Jacket", sent["name"]!!.jsonPrimitive.content)
+        assertEquals("12.50", sent["estimatedPrice"]!!.jsonObject["amount"]!!.jsonPrimitive.content)
+        assertEquals("EUR", sent["estimatedPrice"]!!.jsonObject["currency"]!!.jsonPrimitive.content)
+        assertEquals(listOf("denim", "vintage"), sent["labels"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf(3L), sent["colorIds"]!!.jsonArray.map { it.jsonPrimitive.long })
+        assertFalse(sent["sold"]!!.jsonPrimitive.boolean)
+        assertFalse("sku" in sent)
+    }
+
+    @Test fun `items create json prints the response as is, with a random key by default`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Post, "/api/public/v1/items", status = 201, body = created)
+        val result = cli.run("items", "create", "--name", "Jacket", "--json")
+        assertEquals("$created\n", result.stdout)
+        assertTrue(cli.requests.single().headers["Idempotency-Key"]!!.isNotBlank())
+    }
+
+    @Test fun `items update patches only the given fields`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Patch, "/api/public/v1/items/7", body = created)
+        val result = cli.run("items", "update", "7", "--selling-price", "20", "--sold", "true", "--currency", "eur")
+        assertEquals(0, result.code, result.stderr)
+        val request = cli.requests.single()
+        assertEquals(null, request.headers["Idempotency-Key"])
+        val sent = request.json()
+        assertEquals(setOf("sellingPrice", "sold"), sent.keys)
+        assertEquals("EUR", sent["sellingPrice"]!!.jsonObject["currency"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `items create and update refuse typos before anything is sent`() = runTest {
+        val cli = signedIn()
+        assertEquals(ExitCode.USAGE, cli.run("items", "create").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", " ").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--estimated-price", "12,50").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--estimated-price", "1", "--currency", "euro").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--selling-date", "yesterday").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--currency", "euro").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", "--label", "").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "update", "7").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "update", "7", "--name", "").code)
+        assertTrue(cli.requests.isEmpty())
+    }
+
+    @Test fun `items update of a missing item exits with 4 and a missing scope with 3`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Patch, "/api/public/v1/items/8", status = 404, body = CliHarness.error("item_not_found", "No such item."))
+        cli.on(HttpMethod.Post, "/api/public/v1/items", status = 403, body = CliHarness.error("insufficient_scope", "Missing scope"))
+        assertEquals(ExitCode.NOT_FOUND, cli.run("items", "update", "8", "--name", "x").code)
+        assertEquals(ExitCode.AUTHENTICATION, cli.run("items", "create", "--name", "x").code)
+    }
 }

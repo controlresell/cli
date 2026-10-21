@@ -3,6 +3,9 @@ package com.controlresell.cli.items
 import com.controlresell.cli.CliEnvironment
 import com.controlresell.cli.output.*
 import com.controlresell.sdk.generated.models.Item
+import com.controlresell.sdk.generated.models.ItemCreateRequest
+import com.controlresell.sdk.generated.models.ItemUpdateRequest
+import com.controlresell.sdk.generated.models.Money
 import com.controlresell.sdk.generated.models.PriceDropRequest
 import com.controlresell.sdk.generated.models.PublishRequest
 import com.controlresell.sdk.generated.models.RepublishRequest
@@ -14,16 +17,18 @@ import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.long
 import io.ktor.client.statement.bodyAsText
+import kotlin.time.Instant
 
 internal class Items(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "items") {
     override fun help(context: Context) = "The items of the seller's stock."
     init {
-        subcommands(ListItems(environment), GetItem(environment), ItemListings(environment), PublishItem(environment),
+        subcommands(ListItems(environment), GetItem(environment), ItemListings(environment), CreateItem(environment), UpdateItem(environment), PublishItem(environment),
             PriceDropItem(environment), RepublishItem(environment), DeleteItem(environment))
     }
 }
@@ -66,6 +71,106 @@ private class ItemListings(private val environment: CliEnvironment) : Suspending
         echo(terminal.table(listOf("ID", "Account", "Status", "Price", "Published", "URL"), response.body().`data`.map {
             listOf(it.id, it.accountId, it.status, money(it.price), date(it.publishedAt), it.url)
         }, empty = "This item is not listed."))
+    }
+}
+
+/** The fields of an item, shared by `create` and `update`. */
+private class ItemFields : OptionGroup() {
+    val sku by option("--sku", help = "The item's SKU.")
+    val description by option("--description", help = "The item's description.")
+    val photoIds by option("--photo-id", help = "A file already in your library to use as a photo, in order. Repeat it for several.").multiple()
+    val categoryId by option("--category-id", help = "The category's identifier.").long()
+    val brandId by option("--brand-id", help = "The brand's identifier.").long()
+    val sizeId by option("--size-id", help = "The size's identifier.").long()
+    val colorIds by option("--color-id", help = "A color's identifier. Repeat it for several.").long().multiple()
+    val state by option("--state", help = "The condition's identifier.").long()
+    val sex by option("--sex", help = "The sex the item is for.")
+    val labels by option("--label", help = "A label (created if you do not have it yet). Repeat it for several.").multiple()
+    val sold by option("--sold", help = "true: the item is sold; false: it is not.").boolean()
+    val estimatedPrice by option("--estimated-price", help = "The estimated price as a decimal number, such as 12.50.")
+    val purchasePrice by option("--purchase-price", help = "The purchase price as a decimal number, such as 12.50.")
+    val sellingPrice by option("--selling-price", help = "The selling price as a decimal number, such as 12.50.")
+    val purchaseDate by option("--purchase-date", help = "The purchase date, ISO-8601 with its offset, such as 2026-10-01T00:00:00Z.")
+    val sellingDate by option("--selling-date", help = "The selling date, ISO-8601 with its offset.")
+    val currency by option("--currency", help = "The currency of the prices (default EUR, the only one accepted for now).").default("EUR")
+
+    val any get() = listOf(sku, description, categoryId, brandId, sizeId, state, sex, sold, estimatedPrice, purchasePrice,
+        sellingPrice, purchaseDate, sellingDate).any { it != null } ||
+        listOf(photoIds, colorIds, labels).any { it.isNotEmpty() }
+
+    /** Local checks first, so that a typo does not reach the API. */
+    fun amount(option: String, value: String?): Money? {
+        if (value == null) return null
+        if (!AMOUNT.matches(value)) throw UsageError("$option must be a decimal number with at most 2 decimals, such as 12.50.")
+        return Money(amount = value, currency = currency.uppercase())
+    }
+
+    fun instant(option: String, value: String?): Instant? = value?.let { parseInstant(option, it) }
+
+    fun toCreate(name: String) = ItemCreateRequest(
+        name = name, sku = sku, description = description, photoIds = photoIds.takeIf { it.isNotEmpty() },
+        categoryId = categoryId, brandId = brandId, sizeId = sizeId, colorIds = colorIds.takeIf { it.isNotEmpty() },
+        state = state, sex = sex, labels = labels.takeIf { it.isNotEmpty() }, sold = sold,
+        estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
+        purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
+        sellingDate = instant("--selling-date", sellingDate),
+    )
+
+    fun toUpdate(name: String?) = ItemUpdateRequest(
+        name = name, sku = sku, description = description, photoIds = photoIds.takeIf { it.isNotEmpty() },
+        categoryId = categoryId, brandId = brandId, sizeId = sizeId, colorIds = colorIds.takeIf { it.isNotEmpty() },
+        state = state, sex = sex, labels = labels.takeIf { it.isNotEmpty() }, sold = sold,
+        estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
+        purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
+        sellingDate = instant("--selling-date", sellingDate),
+    )
+
+    /** Checks the values that need no price to be wrong, before any request. */
+    fun check() {
+        if (!Regex("[A-Za-z]{3}").matches(currency)) throw UsageError("--currency must be a three-letter code such as EUR.")
+        if (sku?.isBlank() == true) throw UsageError("--sku cannot be empty.")
+        if (labels.any { it.isBlank() }) throw UsageError("--label cannot be empty.")
+        if (photoIds.any { it.isBlank() }) throw UsageError("--photo-id cannot be empty.")
+    }
+}
+
+private val AMOUNT = Regex("""\d+(\.\d{1,2})?""")
+
+private class CreateItem(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "create") {
+    private val name by option("--name", help = "The item's name.").required()
+    private val fields by ItemFields()
+    private val write by WriteOptions()
+    private val json by option("--json", help = "Print the API's JSON response.").flag()
+    override fun help(context: Context) =
+        "Add an item to your stock, unsold and not published (publish it with cr items publish). Needs the items:write scope."
+    override suspend fun run() {
+        if (name.isBlank()) throw UsageError("--name cannot be empty.")
+        fields.check()
+        val request = fields.toCreate(name)
+        environment.sdk().use { client ->
+            val response = client.items.createItem(write.key(), request)
+            if (json) echo(response.response.bodyAsText().trim()) else echo(item(response.body()))
+        }
+    }
+}
+
+private class UpdateItem(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "update") {
+    private val id by argument(help = "The item's identifier, a number.").long()
+    private val name by option("--name", help = "The item's new name.")
+    private val fields by ItemFields()
+    private val json by option("--json", help = "Print the API's JSON response.").flag()
+    override fun help(context: Context) =
+        "Change fields of an item in your stock; the fields you leave out keep their value, and a list you give replaces the whole list. " +
+            "It changes the item in ControlResell only, not its listings on the marketplaces. Needs the items:write scope."
+    override suspend fun run() {
+        if (name != null && name!!.isBlank()) throw UsageError("--name cannot be empty.")
+        if (name == null && !fields.any) throw UsageError("Give at least one field to change, such as --name or --estimated-price.")
+        fields.check()
+        val request = fields.toUpdate(name)
+        environment.sdk().use { client ->
+            val response = client.items.updateItem(id, request)
+            if (json) echo(response.response.bodyAsText().trim()) else echo(item(response.body()))
+        }
     }
 }
 

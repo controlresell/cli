@@ -45,7 +45,7 @@ step. To undo it, delete `~/.local/bin/cr` (macOS/Linux) or remove the launcher 
 ## Log in
 
 Create an API key in the ControlResell app, with the scopes of the commands you use (`accounts:read`, `items:read`,
-`conversations:read`, and `items:write`, `conversations:write` for the commands that change something; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
+`conversations:read`, `orders:read`, and `items:write`, `conversations:write` for the commands that change something; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
 saved, and never appears in your shell history or in the process list:
 
 ```sh
@@ -70,9 +70,14 @@ cr accounts get ACCOUNT_ID
 cr items list [--sold true|false] [--account ACCOUNT_ID]
 cr items get ITEM_ID
 cr items listings ITEM_ID
+cr orders list [--bucket to_send|to_pickup] [--platform VINTED] [--account ACCOUNT_ID] [--from 2026-10-01T00:00:00Z] [--to ...]
+cr orders get ORDER_ID
+cr orders labels ORDER_ID
 cr conversations list [--unread true|false] [--account ACCOUNT_ID]
 cr conversations get CONVERSATION_ID
 cr conversations messages CONVERSATION_ID
+cr items create --name NAME [--sku S] [--description D] [--photo-id ID ...] [--category-id N] [--brand-id N] [--size-id N] [--color-id N ...] [--state N] [--sex S] [--label L ...] [--sold true|false] [--estimated-price 12.50] [--purchase-price P] [--selling-price P] [--purchase-date T] [--selling-date T] [--currency EUR]
+cr items update ITEM_ID [--name NAME] [the same fields as create; the ones you leave out keep their value]
 cr items publish ITEM_ID --account ACCOUNT_ID [--account ...] [--cancel-before-proceeding]
 cr items price-drop ITEM_ID --type ABSOLUTE|PERCENTAGE --value 3 [--round-type UP|DOWN|NEAREST] [--round-step 0.5] [--account ACCOUNT_ID]
 cr items republish ITEM_ID [--account ACCOUNT_ID] [--price-variation -5] [--allow-if-deleted] [--drop-type T --drop-value V]
@@ -84,14 +89,15 @@ cr version
 
 ### Writing
 
-The write commands need a key with a write scope: `items:write` for `cr items publish|price-drop|republish|delete`,
+The write commands need a key with a write scope: `items:write` for `cr items create|update|publish|price-drop|republish|delete`,
 `conversations:write` for `cr conversations send|offer`. They act on your real marketplace accounts: the publication, price drop and republication run
 in your accounts' browsers, a message or an offer reaches the buyer. Read what you are about to send.
 
 - `cr items delete` asks `[y/N]` on standard error before deleting, and deleting cannot be undone. Pass `--yes` to skip
   the question in a script; with no input to answer it (a closed standard input) and no `--yes`, it exits with 2 and does
   nothing. An item still online is refused by the API (`item_still_listed`, exit 7).
-- Every write that creates something (`publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
+- `cr items update` changes the item in ControlResell only, not its listings on the marketplaces; a list you give (`--label`, `--color-id`, `--photo-id`) replaces the whole list, and clearing a field is not available from the CLI yet.
+- Every write that creates something (`create`, `publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
   retry a command safely: the API answers the first response again instead of writing twice.
 
 Every command accepts `--help`. Read commands print a table or a summary; `--json` prints the API's JSON response
