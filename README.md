@@ -41,7 +41,7 @@ step. To undo it, delete `~/.local/bin/cr` (macOS/Linux) or remove the launcher 
 ## Log in
 
 Create an API key in the ControlResell app, with the scopes of the commands you use (`accounts:read`, `items:read`,
-`conversations:read`; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
+`conversations:read`, and `items:write`, `conversations:write` for the commands that change something; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
 saved, and never appears in your shell history or in the process list:
 
 ```sh
@@ -69,8 +69,26 @@ cr items listings ITEM_ID
 cr conversations list [--unread true|false] [--account ACCOUNT_ID]
 cr conversations get CONVERSATION_ID
 cr conversations messages CONVERSATION_ID
+cr items publish ITEM_ID --account ACCOUNT_ID [--account ...] [--cancel-before-proceeding]
+cr items price-drop ITEM_ID --type ABSOLUTE|PERCENTAGE --value 3 [--round-type UP|DOWN|NEAREST] [--round-step 0.5] [--account ACCOUNT_ID]
+cr items republish ITEM_ID [--account ACCOUNT_ID] [--price-variation -5] [--allow-if-deleted] [--drop-type T --drop-value V]
+cr items delete ITEM_ID [--yes]
+cr conversations send CONVERSATION_ID --text "Hello!"
+cr conversations offer CONVERSATION_ID --price 12.50 --currency EUR [--transaction TRANSACTION_ID]
 cr version
 ```
+
+### Writing
+
+The write commands need a key with a write scope: `items:write` for `cr items publish|price-drop|republish|delete`,
+`conversations:write` for `cr conversations send|offer`. They act on your real marketplace accounts: the publication, price drop and republication run
+in your accounts' browsers, a message or an offer reaches the buyer. Read what you are about to send.
+
+- `cr items delete` asks `[y/N]` on standard error before deleting, and deleting cannot be undone. Pass `--yes` to skip
+  the question in a script; with no input to answer it (a closed standard input) and no `--yes`, it exits with 2 and does
+  nothing. An item still online is refused by the API (`item_still_listed`, exit 7).
+- Every write that creates something (`publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
+  retry a command safely: the API answers the first response again instead of writing twice.
 
 Every command accepts `--help`. Read commands print a table or a summary; `--json` prints the API's JSON response
 unchanged, for `jq` and scripts.
