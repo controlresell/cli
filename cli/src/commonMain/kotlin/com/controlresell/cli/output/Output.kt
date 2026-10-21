@@ -19,3 +19,11 @@ internal fun date(value: Instant?): String? = value?.toString()
 internal fun parseInstant(option: String, value: String): Instant =
     try { Instant.parse(value) }
     catch (_: IllegalArgumentException) { throw com.github.ajalt.clikt.core.UsageError("$option must be an ISO-8601 instant with its offset, such as 2026-10-01T00:00:00Z.") }
+
+/** The `--from` / `--to` window of a list: both parsed, `--to` after `--from`, or a usage error. */
+internal fun window(from: String?, to: String?): Pair<Instant?, Instant?> {
+    val start = from?.let { parseInstant("--from", it) }
+    val end = to?.let { parseInstant("--to", it) }
+    if (start != null && end != null && end <= start) throw com.github.ajalt.clikt.core.UsageError("--to must be after --from.")
+    return start to end
+}
