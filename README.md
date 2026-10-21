@@ -15,7 +15,7 @@ curl -fsSL https://github.com/controlresell/cli/releases/latest/download/install
 ```
 
 ```powershell
-& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing 'https://github.com/controlresell/cli/releases/latest/download/install.ps1').Content))
+& { $f = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName() + '.ps1'); try { Invoke-WebRequest -UseBasicParsing 'https://github.com/controlresell/cli/releases/latest/download/install.ps1' -OutFile $f; & ([scriptblock]::Create([IO.File]::ReadAllText($f))) } finally { Remove-Item $f -ErrorAction SilentlyContinue } }
 ```
 
 The installer verifies the release signature against the public key embedded in the executable, installs it in your

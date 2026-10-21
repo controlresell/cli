@@ -209,4 +209,16 @@ class PowerShellBootstrapTest(unittest.TestCase):
             self.assertEqual(0, result.returncode, (result.stdout + result.stderr).decode(errors='replace'))
 
 
+class ReadmeWindowsInstallTest(unittest.TestCase):
+    def test_one_liner_does_not_read_release_asset_content(self):
+        # GitHub serves release assets as application/octet-stream: .Content is a byte[], not text.
+        readme = (Path(__file__).resolve().parent.parent / 'README.md').read_text()
+        lines = [line for line in readme.splitlines() if 'install.ps1' in line and 'Invoke-WebRequest' in line]
+        self.assertTrue(lines)
+        for line in lines:
+            self.assertNotIn(').Content', line)
+            self.assertIn('-OutFile', line)
+            self.assertIn('[IO.File]::ReadAllText', line)
+
+
 if __name__ == '__main__': unittest.main()
