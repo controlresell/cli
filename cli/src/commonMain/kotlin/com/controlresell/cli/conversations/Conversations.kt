@@ -78,9 +78,12 @@ private class SendMessage(private val environment: CliEnvironment) : SuspendingC
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Send a message to the buyer of a conversation. Needs the conversations:write scope."
-    override suspend fun run() = environment.sdk().use { client ->
+    override suspend fun run() {
+        if (text.isBlank()) throw UsageError("--text cannot be empty.")
+        environment.sdk().use { client ->
         val response = client.conversations.sendMessage(id, write.key(), SendMessageRequest(text = text))
         if (json) echo(response.response.bodyAsText().trim()) else echo(sent(response.body()))
+        }
     }
 }
 

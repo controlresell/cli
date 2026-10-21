@@ -125,6 +125,11 @@ class WriteCommandsTest {
         assertEquals(ExitCode.USAGE, cli.run("items", "price-drop", "7", "--type", "ABSOLUTE", "--value", "abc").code)
         assertEquals(ExitCode.USAGE, cli.run("conversations", "offer", "c_1", "--price", "12,50", "--currency", "EUR").code)
         assertEquals(ExitCode.USAGE, cli.run("conversations", "offer", "c_1", "--price", "0", "--currency", "EUR").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "price-drop", "7", "--type", "ABSOLUTE", "--value", "0").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "price-drop", "7", "--type", "PERCENTAGE", "--value", "150").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "republish", "7", "--price-variation", "abc").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "publish", "7", "--account", "").code)
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "send", "c_1", "--text", " ").code)
         assertTrue(cli.requests.isEmpty())
     }
 

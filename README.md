@@ -81,7 +81,7 @@ cr version
 ### Writing
 
 The write commands need a key with a write scope: `items:write` for `cr items publish|price-drop|republish|delete`,
-`conversations:write` for `cr conversations send|offer`. They and act on your real marketplace accounts: the publication, price drop and republication run
+`conversations:write` for `cr conversations send|offer`. They act on your real marketplace accounts: the publication, price drop and republication run
 in your accounts' browsers, a message or an offer reaches the buyer. Read what you are about to send.
 
 - `cr items delete` asks `[y/N]` on standard error before deleting, and deleting cannot be undone. Pass `--yes` to skip
