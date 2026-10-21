@@ -23,8 +23,9 @@ user's application data and makes `cr` available by name (a `~/.local/bin` link 
 another directory, or `CONTROLRESELL_INSTALL_BUNDLE` to install from a downloaded release directory without network
 access. Running the installer again keeps your saved login.
 
-The script you download is pinned to the release it comes from, so every file it fetches matches that exact version. To
-install a specific version, replace `releases/latest/download/` with `releases/download/<version>/`.
+The script you download is pinned to the release it comes from, so every file it fetches matches that exact version. `latest` serves
+the newest stable release only. To install a specific version or a pre-release, replace `releases/latest/download/` with
+`releases/download/<version>/`, without a `v` prefix (for example `releases/download/0.1.0/`).
 
 The installer runs `cr install`, which you can also run yourself: `--version` picks a release, `--bundle DIR` installs a
 downloaded release directory, `--root DIR` chooses the directory. The default directory is
