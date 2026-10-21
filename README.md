@@ -80,14 +80,14 @@ cr version
 
 ### Writing
 
-The write commands (`publish`, `price-drop`, `republish`, `delete`, `send`, `offer`) need a key with the `items:write` or
-`conversations:write` scope, and act on your real marketplace accounts: the publication, price drop and republication run
+The write commands need a key with a write scope: `items:write` for `cr items publish|price-drop|republish|delete`,
+`conversations:write` for `cr conversations send|offer`. They and act on your real marketplace accounts: the publication, price drop and republication run
 in your accounts' browsers, a message or an offer reaches the buyer. Read what you are about to send.
 
 - `cr items delete` asks `[y/N]` on standard error before deleting, and deleting cannot be undone. Pass `--yes` to skip
   the question in a script; with no input to answer it (a closed standard input) and no `--yes`, it exits with 2 and does
   nothing. An item still online is refused by the API (`item_still_listed`, exit 7).
-- Every write carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
+- Every write that creates something (`publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
   retry a command safely: the API answers the first response again instead of writing twice.
 
 Every command accepts `--help`. Read commands print a table or a summary; `--json` prints the API's JSON response

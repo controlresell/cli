@@ -109,13 +109,15 @@ private class RepublishItem(private val environment: CliEnvironment) : Suspendin
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Delete an item's listings and publish them again. Needs the items:write scope."
-    override suspend fun run() = environment.sdk().use { client ->
+    override suspend fun run() {
         if ((dropType == null) != (dropValue == null)) throw UsageError("--drop-type and --drop-value go together.")
         val drop = dropType?.let { priceDrop(it, dropValue!!, null, null, emptyList()) }
+        environment.sdk().use { client ->
         val response = client.items.republishItem(id, write.key(), RepublishRequest(
             accountIds = accounts.takeIf { it.isNotEmpty() }, priceDrop = drop, priceVariation = priceVariation,
             allowIfDeleted = allowIfDeleted.takeIf { it }))
         if (json) echo(response.response.bodyAsText().trim()) else echo(scheduled(response.body()))
+        }
     }
 }
 
@@ -131,9 +133,17 @@ private class DeleteItem(private val environment: CliEnvironment) : SuspendingCl
     }
 }
 
-private fun priceDrop(type: String, value: String, roundType: String?, roundStep: String?, accounts: List<String>) =
-    PriceDropRequest(type = type.uppercase(), value = value, roundType = roundType?.uppercase(), roundStep = roundStep,
+private val DECIMAL = Regex("""\d+(\.\d+)?""")
+
+/** Local checks first: a typo must not reach the marketplace accounts. */
+private fun priceDrop(type: String, value: String, roundType: String?, roundStep: String?, accounts: List<String>): PriceDropRequest {
+    if (type.uppercase() !in setOf("ABSOLUTE", "PERCENTAGE")) throw UsageError("--type must be ABSOLUTE or PERCENTAGE.")
+    if (!DECIMAL.matches(value)) throw UsageError("--value must be a positive decimal number such as 3 or 10.5.")
+    if (roundType != null && roundType.uppercase() !in setOf("UP", "DOWN", "NEAREST")) throw UsageError("--round-type must be UP, DOWN or NEAREST.")
+    if (roundStep != null && !DECIMAL.matches(roundStep)) throw UsageError("--round-step must be a positive decimal number such as 0.5.")
+    return PriceDropRequest(type = type.uppercase(), value = value, roundType = roundType?.uppercase(), roundStep = roundStep,
         accountIds = accounts.takeIf { it.isNotEmpty() })
+}
 
 internal fun scheduled(action: ScheduledAction) = sheet(
     "Item" to action.itemId.toString(),

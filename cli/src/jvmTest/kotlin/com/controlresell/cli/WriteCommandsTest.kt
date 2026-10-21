@@ -51,8 +51,10 @@ class WriteCommandsTest {
         assertEquals("-5", sent["priceVariation"]!!.jsonPrimitive.content)
         assertEquals("PERCENTAGE", sent["priceDrop"]!!.jsonObject["type"]!!.jsonPrimitive.content)
         assertFalse("allowIfDeleted" in sent)
+        assertEquals(listOf("acc_1"), sent["accountIds"]!!.jsonArray.map { it.jsonPrimitive.content })
         val lone = cli.run("items", "republish", "7", "--drop-type", "ABSOLUTE")
         assertEquals(ExitCode.USAGE, lone.code)
+        assertEquals(1, cli.requests.size, "the lone --drop-type sent nothing")
     }
 
     @Test fun `price-drop sends the drop to the price-drop route`() = runTest {
@@ -115,6 +117,15 @@ class WriteCommandsTest {
         assertEquals("12.50", sent["price"]!!.jsonObject["amount"]!!.jsonPrimitive.content)
         assertEquals("EUR", sent["price"]!!.jsonObject["currency"]!!.jsonPrimitive.content)
         assertEquals("t_1", sent["transactionId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `typos are refused before anything is sent`() = runTest {
+        val cli = signedIn()
+        assertEquals(ExitCode.USAGE, cli.run("items", "price-drop", "7", "--type", "pct", "--value", "3").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "price-drop", "7", "--type", "ABSOLUTE", "--value", "abc").code)
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "offer", "c_1", "--price", "12,50", "--currency", "EUR").code)
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "offer", "c_1", "--price", "0", "--currency", "EUR").code)
+        assertTrue(cli.requests.isEmpty())
     }
 
     @Test fun `a missing write scope exits with 3`() = runTest {

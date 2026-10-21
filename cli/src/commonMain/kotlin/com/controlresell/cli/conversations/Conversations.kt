@@ -10,6 +10,7 @@ import com.controlresell.sdk.generated.models.SendOfferRequest
 import com.github.ajalt.clikt.command.SuspendingCliktCommand
 import com.github.ajalt.clikt.command.SuspendingNoOpCliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.parameters.arguments.argument
@@ -91,10 +92,14 @@ private class SendOffer(private val environment: CliEnvironment) : SuspendingCli
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Send the buyer a price offer. Needs the conversations:write scope."
-    override suspend fun run() = environment.sdk().use { client ->
+    override suspend fun run() {
+        if (!Regex("""\d+(\.\d{1,2})?""").matches(price) || price.toDouble() <= 0.0) throw UsageError("--price must be a positive decimal number such as 12.50.")
+        if (!Regex("[A-Za-z]{3}").matches(currency)) throw UsageError("--currency must be a three-letter code such as EUR.")
+        environment.sdk().use { client ->
         val response = client.conversations.sendOffer(id, write.key(),
             SendOfferRequest(price = Money(amount = price, currency = currency.uppercase()), transactionId = transaction))
         if (json) echo(response.response.bodyAsText().trim()) else echo(sent(response.body()))
+        }
     }
 }
 
