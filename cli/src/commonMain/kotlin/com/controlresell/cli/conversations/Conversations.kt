@@ -4,6 +4,9 @@ import com.controlresell.cli.CliEnvironment
 import com.controlresell.cli.output.*
 import com.controlresell.sdk.generated.models.Conversation
 import com.controlresell.sdk.generated.models.Message
+import com.controlresell.sdk.generated.models.Money
+import com.controlresell.sdk.generated.models.SendMessageRequest
+import com.controlresell.sdk.generated.models.SendOfferRequest
 import com.github.ajalt.clikt.command.SuspendingCliktCommand
 import com.github.ajalt.clikt.command.SuspendingNoOpCliktCommand
 import com.github.ajalt.clikt.core.Context
@@ -17,7 +20,10 @@ import io.ktor.client.statement.bodyAsText
 
 internal class Conversations(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "conversations") {
     override fun help(context: Context) = "The conversations with buyers."
-    init { subcommands(ListConversations(environment), GetConversation(environment), ConversationMessages(environment)) }
+    init {
+        subcommands(ListConversations(environment), GetConversation(environment), ConversationMessages(environment),
+            SendMessage(environment), SendOffer(environment))
+    }
 }
 
 private class ListConversations(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "list") {
@@ -64,6 +70,43 @@ private class ConversationMessages(private val environment: CliEnvironment) : Su
         })
     }
 }
+
+private class SendMessage(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "send") {
+    private val id by argument(help = "The conversation's identifier.")
+    private val text by option("--text", help = "The message to send to the buyer.").required()
+    private val write by WriteOptions()
+    private val json by option("--json", help = "Print the API's JSON response.").flag()
+    override fun help(context: Context) = "Send a message to the buyer of a conversation. Needs the conversations:write scope."
+    override suspend fun run() = environment.sdk().use { client ->
+        val response = client.conversations.sendMessage(id, write.key(), SendMessageRequest(text = text))
+        if (json) echo(response.response.bodyAsText().trim()) else echo(sent(response.body()))
+    }
+}
+
+private class SendOffer(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "offer") {
+    private val id by argument(help = "The conversation's identifier.")
+    private val price by option("--price", help = "The offered price as a decimal number, such as 12.50.").required()
+    private val currency by option("--currency", help = "The currency of the price, such as EUR (the currency of the account; EUR accounts only for now).").required()
+    private val transaction by option("--transaction", help = "The identifier of the transaction the offer is about, when the conversation has several.")
+    private val write by WriteOptions()
+    private val json by option("--json", help = "Print the API's JSON response.").flag()
+    override fun help(context: Context) = "Send the buyer a price offer. Needs the conversations:write scope."
+    override suspend fun run() = environment.sdk().use { client ->
+        val response = client.conversations.sendOffer(id, write.key(),
+            SendOfferRequest(price = Money(amount = price, currency = currency.uppercase()), transactionId = transaction))
+        if (json) echo(response.response.bodyAsText().trim()) else echo(sent(response.body()))
+    }
+}
+
+internal fun sent(message: Message) = sheet(
+    "ID" to message.id,
+    "Conversation" to message.conversationId,
+    "Author" to message.author,
+    "Type" to message.type,
+    "Status" to message.status,
+    "Text" to short(text(message), 200),
+    "Sent" to date(message.createdAt),
+)
 
 /** A message's text, or its offer. */
 internal fun text(message: Message): String? =
