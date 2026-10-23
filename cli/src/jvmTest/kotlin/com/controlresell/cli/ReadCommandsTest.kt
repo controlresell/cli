@@ -7,7 +7,7 @@ import kotlin.test.*
 
 class ReadCommandsTest {
     private fun account(n: Int) = """{"id":"acc_$n","platform":"vinted","name":"Shop $n","status":"CONNECTED"}"""
-    private fun item(n: Int, sold: Boolean = false) = """{"id":$n,"name":"Jacket $n","photos":[],"colorIds":[],"labels":["denim"],"sold":$sold,""" +
+    private fun item(n: Int, sold: Boolean = false) = """{"id":$n,"name":"Jacket $n","photos":[],"colorIds":[],"materialIds":[],"enumValues":[],"attributes":[],"customFields":[],"labels":["denim"],"sold":$sold,""" +
         """"createdAt":"2026-10-01T10:00:00Z","updatedAt":"2026-10-02T10:00:00Z","sellingPrice":{"amount":"12.50","currency":"EUR"}}"""
 
     private fun signedIn() = CliHarness().apply { signIn() }
