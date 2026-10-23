@@ -200,6 +200,29 @@ class WriteCommandsTest {
         assertEquals(1, cli.requests.size)
     }
 
+    @Test fun `items create sends the platform fields too`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Post, "/api/public/v1/items", status = 201, body = created)
+        val result = cli.run("items", "create", "--name", "x", "--package-size-id", "4", "--material-id", "2",
+            "--measurement-width", "30", "--enum", "color=red", "--attribute", "model=501", "--custom-field", "12=blue",
+            "--selling-place-id", "8")
+        assertEquals(0, result.code, result.stderr)
+        val sent = cli.requests.single().json()
+        assertEquals(setOf("name", "packageSizeId", "materialIds", "measurementWidth", "enumValues", "attributes", "customFields", "sellingPlaceId"), sent.keys)
+        assertEquals(8L, sent["sellingPlaceId"]!!.jsonPrimitive.long)
+        assertEquals("model", sent["attributes"]!!.jsonArray.single().jsonObject["fieldKey"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `the platform fields are refused when malformed, before anything is sent`() = runTest {
+        val cli = signedIn()
+        for (bad in listOf(
+            listOf("--measurement-length", "NaN"), listOf("--measurement-width", "Infinity"), listOf("--measurement-length", "0"),
+            listOf("--package-size-id", "0"), listOf("--material-id", "-3"), listOf("--purchase-place-id", "0"),
+            listOf("--selling-place-id", "-1"), listOf("--enum", " =red"), listOf("--attribute", "model="), listOf("--custom-field", "foo"),
+        )) assertEquals(ExitCode.USAGE, cli.run("items", "create", "--name", "x", *bad.toTypedArray()).code, bad.toString())
+        assertTrue(cli.requests.isEmpty())
+    }
+
     @Test fun `items create and update refuse typos before anything is sent`() = runTest {
         val cli = signedIn()
         assertEquals(ExitCode.USAGE, cli.run("items", "create").code)
