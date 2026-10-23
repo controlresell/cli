@@ -139,7 +139,7 @@ class WriteCommandsTest {
         assertEquals(ExitCode.AUTHENTICATION, cli.run("conversations", "send", "c_1", "--text", "x").code)
     }
 
-    private val created = """{"id":7,"name":"Jacket","photos":[],"colorIds":[],"labels":["denim"],"sold":false,"createdAt":"2026-10-21T10:00:00Z","updatedAt":"2026-10-21T10:00:00Z","estimatedPrice":{"amount":"12.50","currency":"EUR"}}"""
+    private val created = """{"id":7,"name":"Jacket","photos":[],"colorIds":[],"materialIds":[],"enumValues":[],"attributes":[],"customFields":[],"labels":["denim"],"sold":false,"createdAt":"2026-10-21T10:00:00Z","updatedAt":"2026-10-21T10:00:00Z","estimatedPrice":{"amount":"12.50","currency":"EUR"}}"""
 
     @Test fun `items create posts the fields with an idempotency key and prints the item`() = runTest {
         val cli = signedIn()
@@ -178,6 +178,26 @@ class WriteCommandsTest {
         val sent = request.json()
         assertEquals(setOf("sellingPrice", "sold"), sent.keys)
         assertEquals("EUR", sent["sellingPrice"]!!.jsonObject["currency"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `items create and update send the platform fields`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Patch, "/api/public/v1/items/7", body = created)
+        val result = cli.run("items", "update", "7", "--package-size-id", "4", "--material-id", "2", "--material-id", "5",
+            "--measurement-length", "42.5", "--enum", "color=red", "--attribute", "model=a=b", "--custom-field", "12=blue",
+            "--purchase-place-id", "9")
+        assertEquals(0, result.code, result.stderr)
+        val sent = cli.requests.single().json()
+        assertEquals(4L, sent["packageSizeId"]!!.jsonPrimitive.long)
+        assertEquals(listOf(2L, 5L), sent["materialIds"]!!.jsonArray.map { it.jsonPrimitive.long })
+        assertEquals("red", sent["enumValues"]!!.jsonArray.single().jsonObject["enumValue"]!!.jsonPrimitive.content)
+        assertEquals("a=b", sent["attributes"]!!.jsonArray.single().jsonObject["value"]!!.jsonPrimitive.content)
+        assertEquals(12L, sent["customFields"]!!.jsonArray.single().jsonObject["fieldId"]!!.jsonPrimitive.long)
+        assertEquals(9L, sent["purchasePlaceId"]!!.jsonPrimitive.long)
+        assertEquals(setOf("packageSizeId", "materialIds", "measurementLength", "enumValues", "attributes", "customFields", "purchasePlaceId"), sent.keys)
+        assertEquals(ExitCode.USAGE, cli.run("items", "update", "7", "--enum", "color").code)
+        assertEquals(ExitCode.USAGE, cli.run("items", "update", "7", "--custom-field", "x=blue").code)
+        assertEquals(1, cli.requests.size)
     }
 
     @Test fun `items create and update refuse typos before anything is sent`() = runTest {

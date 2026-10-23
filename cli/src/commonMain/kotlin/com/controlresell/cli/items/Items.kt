@@ -3,7 +3,10 @@ package com.controlresell.cli.items
 import com.controlresell.cli.CliEnvironment
 import com.controlresell.cli.output.*
 import com.controlresell.sdk.generated.models.Item
+import com.controlresell.sdk.generated.models.ItemAttribute
 import com.controlresell.sdk.generated.models.ItemCreateRequest
+import com.controlresell.sdk.generated.models.ItemCustomField
+import com.controlresell.sdk.generated.models.ItemEnumValue
 import com.controlresell.sdk.generated.models.ItemUpdateRequest
 import com.controlresell.sdk.generated.models.Money
 import com.controlresell.sdk.generated.models.PriceDropRequest
@@ -21,6 +24,7 @@ import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
+import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.long
 import io.ktor.client.statement.bodyAsText
 import kotlin.time.Instant
@@ -92,11 +96,21 @@ private class ItemFields : OptionGroup() {
     val sellingPrice by option("--selling-price", help = "The selling price as a decimal number, such as 12.50.")
     val purchaseDate by option("--purchase-date", help = "The purchase date, ISO-8601 with its offset, such as 2026-10-01T00:00:00Z.")
     val sellingDate by option("--selling-date", help = "The selling date, ISO-8601 with its offset.")
+    val packageSizeId by option("--package-size-id", help = "The package size's identifier.").long()
+    val materialIds by option("--material-id", help = "A material's identifier. Repeat it for several.").long().multiple()
+    val measurementLength by option("--measurement-length", help = "The item's length in centimeters, such as 42.5.").double()
+    val measurementWidth by option("--measurement-width", help = "The item's width in centimeters, such as 30.").double()
+    val enumValues by option("--enum", help = "A value of one of the category's enumerated fields, as KEY=VALUE. Repeat it for several.").multiple()
+    val attributes by option("--attribute", help = "A value of one of the category's free-text fields, as KEY=VALUE. Repeat it for several.").multiple()
+    val customFields by option("--custom-field", help = "A value of one of your own fields, as FIELD_ID=VALUE. Repeat it for several.").multiple()
+    val purchasePlaceId by option("--purchase-place-id", help = "The identifier of the place the item was bought.").long()
+    val sellingPlaceId by option("--selling-place-id", help = "The identifier of the place the item was sold.").long()
     val currency by option("--currency", help = "The currency of the prices (default EUR, the only one accepted for now).").default("EUR")
 
     val any get() = listOf(sku, description, categoryId, brandId, sizeId, state, sex, sold, estimatedPrice, purchasePrice,
-        sellingPrice, purchaseDate, sellingDate).any { it != null } ||
-        listOf(photoIds, colorIds, labels).any { it.isNotEmpty() }
+        sellingPrice, purchaseDate, sellingDate, packageSizeId, measurementLength, measurementWidth, purchasePlaceId,
+        sellingPlaceId).any { it != null } ||
+        listOf(photoIds, colorIds, labels, materialIds, enumValues, attributes, customFields).any { it.isNotEmpty() }
 
     /** Local checks first, so that a typo does not reach the API. */
     fun amount(option: String, value: String?): Money? {
@@ -114,6 +128,11 @@ private class ItemFields : OptionGroup() {
         estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
         purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
         sellingDate = instant("--selling-date", sellingDate),
+        packageSizeId = packageSizeId, materialIds = materialIds.takeIf { it.isNotEmpty() }, measurementLength = measurementLength,
+        measurementWidth = measurementWidth, purchasePlaceId = purchasePlaceId, sellingPlaceId = sellingPlaceId,
+        enumValues = enumValues.takeIf { it.isNotEmpty() }?.map { pair("--enum", it).let { (k, v) -> ItemEnumValue(enumKey = k, enumValue = v) } },
+        attributes = attributes.takeIf { it.isNotEmpty() }?.map { pair("--attribute", it).let { (k, v) -> ItemAttribute(fieldKey = k, value = v) } },
+        customFields = customFields.takeIf { it.isNotEmpty() }?.map { customField(it) },
     )
 
     fun toUpdate(name: String?) = ItemUpdateRequest(
@@ -123,7 +142,23 @@ private class ItemFields : OptionGroup() {
         estimatedPrice = amount("--estimated-price", estimatedPrice), purchasePrice = amount("--purchase-price", purchasePrice),
         purchaseDate = instant("--purchase-date", purchaseDate), sellingPrice = amount("--selling-price", sellingPrice),
         sellingDate = instant("--selling-date", sellingDate),
+        packageSizeId = packageSizeId, materialIds = materialIds.takeIf { it.isNotEmpty() }, measurementLength = measurementLength,
+        measurementWidth = measurementWidth, purchasePlaceId = purchasePlaceId, sellingPlaceId = sellingPlaceId,
+        enumValues = enumValues.takeIf { it.isNotEmpty() }?.map { pair("--enum", it).let { (k, v) -> ItemEnumValue(enumKey = k, enumValue = v) } },
+        attributes = attributes.takeIf { it.isNotEmpty() }?.map { pair("--attribute", it).let { (k, v) -> ItemAttribute(fieldKey = k, value = v) } },
+        customFields = customFields.takeIf { it.isNotEmpty() }?.map { customField(it) },
     )
+
+    private fun pair(option: String, value: String): Pair<String, String> {
+        val at = value.indexOf('=')
+        if (at <= 0 || at == value.length - 1) throw UsageError("$option must be KEY=VALUE, such as ${if (option == "--enum") "color=red" else "model=501"}.")
+        return value.substring(0, at) to value.substring(at + 1)
+    }
+
+    private fun customField(value: String): ItemCustomField {
+        val (id, text) = pair("--custom-field", value)
+        return ItemCustomField(fieldId = id.toLongOrNull()?.takeIf { it >= 1 } ?: throw UsageError("--custom-field must be FIELD_ID=VALUE, with the identifier of the field, such as 12=blue."), value = text)
+    }
 
     /** Checks the values that need no price to be wrong, before any request. */
     fun check() {
@@ -131,6 +166,10 @@ private class ItemFields : OptionGroup() {
         if (sku?.isBlank() == true) throw UsageError("--sku cannot be empty.")
         if (labels.any { it.isBlank() }) throw UsageError("--label cannot be empty.")
         if (photoIds.any { it.isBlank() }) throw UsageError("--photo-id cannot be empty.")
+        enumValues.forEach { pair("--enum", it) }
+        attributes.forEach { pair("--attribute", it) }
+        customFields.forEach { customField(it) }
+        if (listOfNotNull(measurementLength, measurementWidth).any { it <= 0.0 }) throw UsageError("--measurement-length and --measurement-width must be positive.")
     }
 }
 
@@ -278,6 +317,15 @@ internal fun item(item: Item) = sheet(
     "Description" to short(item.description, 200),
     "Labels" to item.labels.joinToString(", "),
     "Photos" to item.photos.size.toString(),
+    "Package size" to item.packageSizeId?.toString(),
+    "Materials" to item.materialIds.joinToString(", "),
+    "Length (cm)" to item.measurementLength?.toString(),
+    "Width (cm)" to item.measurementWidth?.toString(),
+    "Enumerated fields" to item.enumValues.joinToString(", ") { "${it.enumKey}=${it.enumValue}" },
+    "Free-text fields" to item.attributes.joinToString(", ") { "${it.fieldKey}=${it.value}" },
+    "Custom fields" to item.customFields.joinToString(", ") { "${it.fieldId}=${it.value}" },
+    "Purchase place" to item.purchasePlaceId?.toString(),
+    "Selling place" to item.sellingPlaceId?.toString(),
     "Estimated price" to money(item.estimatedPrice),
     "Purchase price" to money(item.purchasePrice),
     "Purchase date" to date(item.purchaseDate),

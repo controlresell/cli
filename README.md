@@ -76,7 +76,7 @@ cr orders labels ORDER_ID
 cr conversations list [--unread true|false] [--account ACCOUNT_ID]
 cr conversations get CONVERSATION_ID
 cr conversations messages CONVERSATION_ID
-cr items create --name NAME [--sku S] [--description D] [--photo-id ID ...] [--category-id N] [--brand-id N] [--size-id N] [--color-id N ...] [--state N] [--sex S] [--label L ...] [--sold true|false] [--estimated-price 12.50] [--purchase-price P] [--selling-price P] [--purchase-date T] [--selling-date T] [--currency EUR]
+cr items create --name NAME [--sku S] [--description D] [--photo-id ID ...] [--category-id N] [--brand-id N] [--size-id N] [--color-id N ...] [--package-size-id N] [--material-id N ...] [--measurement-length CM] [--measurement-width CM] [--enum KEY=VALUE ...] [--attribute KEY=VALUE ...] [--custom-field ID=VALUE ...] [--purchase-place-id N] [--selling-place-id N] [--state N] [--sex S] [--label L ...] [--sold true|false] [--estimated-price 12.50] [--purchase-price P] [--selling-price P] [--purchase-date T] [--selling-date T] [--currency EUR]
 cr items update ITEM_ID [--name NAME] [the same fields as create; the ones you leave out keep their value]
 cr items publish ITEM_ID --account ACCOUNT_ID [--account ...] [--cancel-before-proceeding]
 cr items price-drop ITEM_ID --type ABSOLUTE|PERCENTAGE --value 3 [--round-type UP|DOWN|NEAREST] [--round-step 0.5] [--account ACCOUNT_ID]
@@ -96,7 +96,7 @@ in your accounts' browsers, a message or an offer reaches the buyer. Read what y
 - `cr items delete` asks `[y/N]` on standard error before deleting, and deleting cannot be undone. Pass `--yes` to skip
   the question in a script; with no input to answer it (a closed standard input) and no `--yes`, it exits with 2 and does
   nothing. An item still online is refused by the API (`item_still_listed`, exit 7).
-- `cr items update` changes the item in ControlResell only, not its listings on the marketplaces; a list you give (`--label`, `--color-id`, `--photo-id`) replaces the whole list, and clearing a field is not available from the CLI yet.
+- `cr items update` changes the item in ControlResell only, not its listings on the marketplaces; a list you give (`--label`, `--color-id`, `--photo-id`, `--material-id`, `--enum`, `--attribute`, `--custom-field`) replaces the whole list, and clearing a field is not available from the CLI yet.
 - Every write that creates something (`create`, `publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
   retry a command safely: the API answers the first response again instead of writing twice.
 
