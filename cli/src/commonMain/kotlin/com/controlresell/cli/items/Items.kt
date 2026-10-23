@@ -130,9 +130,7 @@ private class ItemFields : OptionGroup() {
         sellingDate = instant("--selling-date", sellingDate),
         packageSizeId = packageSizeId, materialIds = materialIds.takeIf { it.isNotEmpty() }, measurementLength = measurementLength,
         measurementWidth = measurementWidth, purchasePlaceId = purchasePlaceId, sellingPlaceId = sellingPlaceId,
-        enumValues = enumValues.takeIf { it.isNotEmpty() }?.map { pair("--enum", it).let { (k, v) -> ItemEnumValue(enumKey = k, enumValue = v) } },
-        attributes = attributes.takeIf { it.isNotEmpty() }?.map { pair("--attribute", it).let { (k, v) -> ItemAttribute(fieldKey = k, value = v) } },
-        customFields = customFields.takeIf { it.isNotEmpty() }?.map { customField(it) },
+        enumValues = enumValueList(), attributes = attributeList(), customFields = customFieldList(),
     )
 
     fun toUpdate(name: String?) = ItemUpdateRequest(
@@ -144,19 +142,25 @@ private class ItemFields : OptionGroup() {
         sellingDate = instant("--selling-date", sellingDate),
         packageSizeId = packageSizeId, materialIds = materialIds.takeIf { it.isNotEmpty() }, measurementLength = measurementLength,
         measurementWidth = measurementWidth, purchasePlaceId = purchasePlaceId, sellingPlaceId = sellingPlaceId,
-        enumValues = enumValues.takeIf { it.isNotEmpty() }?.map { pair("--enum", it).let { (k, v) -> ItemEnumValue(enumKey = k, enumValue = v) } },
-        attributes = attributes.takeIf { it.isNotEmpty() }?.map { pair("--attribute", it).let { (k, v) -> ItemAttribute(fieldKey = k, value = v) } },
-        customFields = customFields.takeIf { it.isNotEmpty() }?.map { customField(it) },
+        enumValues = enumValueList(), attributes = attributeList(), customFields = customFieldList(),
     )
 
-    private fun pair(option: String, value: String): Pair<String, String> {
+    private fun enumValueList() = enumValues.takeIf { it.isNotEmpty() }
+        ?.map { pair("--enum", it, "color=red").let { (k, v) -> ItemEnumValue(enumKey = k, enumValue = v) } }
+
+    private fun attributeList() = attributes.takeIf { it.isNotEmpty() }
+        ?.map { pair("--attribute", it, "model=501").let { (k, v) -> ItemAttribute(fieldKey = k, value = v) } }
+
+    private fun customFieldList() = customFields.takeIf { it.isNotEmpty() }?.map { customField(it) }
+
+    private fun pair(option: String, value: String, example: String): Pair<String, String> {
         val at = value.indexOf('=')
-        if (at <= 0 || at == value.length - 1) throw UsageError("$option must be KEY=VALUE, such as ${if (option == "--enum") "color=red" else "model=501"}.")
+        if (at <= 0 || at == value.length - 1 || value.substring(0, at).isBlank() || value.substring(at + 1).isBlank()) throw UsageError("$option must be KEY=VALUE, such as $example.")
         return value.substring(0, at) to value.substring(at + 1)
     }
 
     private fun customField(value: String): ItemCustomField {
-        val (id, text) = pair("--custom-field", value)
+        val (id, text) = pair("--custom-field", value, "12=blue")
         return ItemCustomField(fieldId = id.toLongOrNull()?.takeIf { it >= 1 } ?: throw UsageError("--custom-field must be FIELD_ID=VALUE, with the identifier of the field, such as 12=blue."), value = text)
     }
 
@@ -166,10 +170,11 @@ private class ItemFields : OptionGroup() {
         if (sku?.isBlank() == true) throw UsageError("--sku cannot be empty.")
         if (labels.any { it.isBlank() }) throw UsageError("--label cannot be empty.")
         if (photoIds.any { it.isBlank() }) throw UsageError("--photo-id cannot be empty.")
-        enumValues.forEach { pair("--enum", it) }
-        attributes.forEach { pair("--attribute", it) }
-        customFields.forEach { customField(it) }
-        if (listOfNotNull(measurementLength, measurementWidth).any { it <= 0.0 }) throw UsageError("--measurement-length and --measurement-width must be positive.")
+        enumValueList()
+        attributeList()
+        customFieldList()
+        if (listOfNotNull(measurementLength, measurementWidth).any { !(it > 0.0 && it.isFinite()) }) throw UsageError("--measurement-length and --measurement-width must be positive numbers.")
+        if (listOfNotNull(packageSizeId, purchasePlaceId, sellingPlaceId).plus(materialIds).any { it < 1 }) throw UsageError("--package-size-id, --material-id, --purchase-place-id and --selling-place-id must be 1 or more.")
     }
 }
 
