@@ -14,7 +14,10 @@ class CheckReleaseTest {
     private fun bytes(value: String) = requireNotNull(value.decodeBase64()).toByteArray()
     private fun transport() = ReleaseClient { configure -> HttpClient(MockEngine { request ->
         assertNull(request.headers[HttpHeaders.Authorization])
-        respond(ByteReadChannel(bytes(if (request.url.encodedPath.endsWith("manifest.json")) ReleaseFixtures.validPayload else ReleaseFixtures.validEnvelope)))
+        val path = request.url.encodedPath
+        // The release lookup lists the two metadata assets as ids 1 and 2; each is then downloaded through the asset API.
+        if (path.contains("/releases/tags/")) respond("""{"draft":false,"prerelease":false,"tag_name":"${path.substringAfterLast('/')}","assets":[{"id":1,"name":"manifest.json"},{"id":2,"name":"manifest.sig"}]}""")
+        else respond(ByteReadChannel(bytes(if (path.endsWith("/assets/1")) ReleaseFixtures.validPayload else ReleaseFixtures.validEnvelope)))
     }) { configure(this) } }
 
     @Test fun aRequestedVersionRequiresASignatureAndAnExactVersionMatch() = runBlocking {
@@ -45,7 +48,7 @@ class CheckReleaseTest {
         var calls = 0
         ReleaseClient { configure -> HttpClient(MockEngine {
             calls++
-            respond(if (calls == 1) """{"draft":false,"prerelease":false,"tag_name":"2.0.0"}""" else "UNSIGNED")
+            respond(if (calls == 1) """{"draft":false,"prerelease":false,"tag_name":"2.0.0","assets":[{"id":1,"name":"manifest.json"},{"id":2,"name":"manifest.sig"}]}""" else "UNSIGNED")
         }) { configure(this) } }.use { client ->
             val error = assertFailsWith<CliOperationException> { CheckRelease(client, currentVersion = "1.0.0")() }
             assertEquals("release_signature_invalid", error.code)

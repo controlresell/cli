@@ -88,7 +88,9 @@ catch (_: Exception) {
 }
 
 private fun failure(error: CliOperationException) = Outcome(ExitCode.FAILURE,
-    if (error.code.startsWith("release_")) "ControlResell CLI release operation failed (${error.code}). Check connectivity, release files, private permissions and platform crypto libraries."
+    if (error.code.startsWith("release_")) "ControlResell CLI release operation failed (${error.code})." +
+        (error.detail?.trim()?.takeIf { it.isNotEmpty() }?.let { " Cause: $it" + if (it.last() in ".…!?") "" else "." } ?: "") +
+        " Check connectivity, release files, private permissions and platform crypto libraries."
     else "ControlResell command failed (${error.code}). Check connectivity, authentication and private file permissions.")
 
 /** The commands that manage the installation itself: they take its locks, so they hold no lease and get no notice. */
@@ -122,6 +124,6 @@ fun main(args: Array<String>): Unit = runBlocking {
 expect object SystemExit { fun fail(message: String, code: Int = 1): Nothing; fun exit(code: Int): Nothing; fun notice(message: String) }
 
 /** Safe operation identifiers only; never print raw platform/HTTP exception messages. */
-class CliOperationException(val code: String) : Exception() {
+class CliOperationException(val code: String, val detail: String? = null) : Exception() {
     init { require(Regex("[a-zA-Z0-9_]{1,120}").matches(code)) }
 }
