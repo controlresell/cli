@@ -30,9 +30,13 @@ internal actual fun flushInstallationDirectory(path: String) {
 internal actual fun validatePrivateInstallationPath(path: String, directory: Boolean) {
     if (controlresell_install_private_path(path, if (directory) 1 else 0) != 1) throw CliOperationException("release_private_path_invalid")
 }
-internal actual fun installationTarget(): String =
-    (if (Platform.osFamily == OsFamily.MACOSX) "macos" else "linux") + "-" +
+internal actual fun installationTarget(): String {
+    // Intel Macs have no build any more: say so instead of crashing or looking for a missing asset.
+    if (Platform.osFamily == OsFamily.MACOSX && Platform.cpuArchitecture != CpuArchitecture.ARM64)
+        throw CliOperationException("release_macos_intel_unsupported", "macOS on Intel is no longer supported")
+    return (if (Platform.osFamily == OsFamily.MACOSX) "macos" else "linux") + "-" +
         when (Platform.cpuArchitecture) { CpuArchitecture.ARM64 -> "arm64"; CpuArchitecture.X64 -> "x64"; else -> error("Unsupported release target.") }
+}
 
 internal actual suspend fun executeInstalledPayload(path: String, arguments: List<String>, root: String): Int = memScoped {
     require((listOf(path, root) + arguments).none { '\u0000' in it })

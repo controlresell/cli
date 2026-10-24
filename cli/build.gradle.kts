@@ -57,7 +57,7 @@ val generateBuildInfo by tasks.registering {
 kotlin {
     jvmToolchain(21)
     jvm { testRuns["test"].executionTask.configure { useJUnitPlatform() } }
-    listOf(macosArm64(), macosX64(), linuxX64(), linuxArm64(), mingwX64()).forEach { target ->
+    listOf(macosArm64(), linuxX64(), linuxArm64(), mingwX64()).forEach { target ->
         if (!target.name.startsWith("mingw")) {
             target.compilations.getByName("main").cinterops.create("process") {
                 definitionFile.set(project.file("src/nativeInterop/cinterop/process.def"))

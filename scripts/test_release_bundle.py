@@ -17,7 +17,7 @@ def native_header(target):
         struct.pack_into('<H', data, 18, 183 if target.endswith('arm64') else 62)
     elif target.startswith('macos'):
         data[:4] = b'\xcf\xfa\xed\xfe'
-        struct.pack_into('<I', data, 4, 0x100000C if target.endswith('arm64') else 0x1000007)
+        struct.pack_into('<I', data, 4, 0x100000C)
     else:
         data[:2] = b'MZ'; struct.pack_into('<I', data, 60, 128)
         data[128:132] = b'PE\0\0'; struct.pack_into('<H', data, 132, 0x8664)
@@ -37,18 +37,18 @@ class ReleaseBundleTest(unittest.TestCase):
                             fileName=name, sha256=release.digest(binary), size=binary.stat().st_size)
             (inputs / f'{target}.json').write_text(json.dumps(metadata))
 
-    def test_assembled_manifest_identifies_all_five_targets_and_every_hash(self):
+    def test_assembled_manifest_identifies_all_four_targets_and_every_hash(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); inputs = root / 'inputs'; self.fixture(inputs)
             manifest = release.assemble(inputs, self.revision, self.source_commit, root / 'output')
             self.assertEqual(set(release.TARGETS), set(manifest['assets']))
             self.assertEqual(self.revision, manifest['tag'])
             sums = (root / 'output/SHA256SUMS').read_text().splitlines()
-            self.assertEqual(6, len(sums))
+            self.assertEqual(5, len(sums))
             for line in sums:
                 checksum, name = line.split('  ')
                 self.assertEqual(checksum, release.digest(root / 'output' / name))
-            self.assertEqual(7, len(list((root / 'output').iterdir())))
+            self.assertEqual(6, len(list((root / 'output').iterdir())))
             with self.assertRaises(ValueError):
                 release.assemble(inputs, self.revision, self.source_commit, root / 'output')
 

@@ -61,7 +61,7 @@ def generate(bundle, public_key, repository='controlresell/cli'):
     if (not isinstance(manifest, dict) or set(manifest) != {'schemaVersion', 'version', 'tag', 'sourceCommit', 'assets'} or
         type(manifest['schemaVersion']) is not int or manifest['schemaVersion'] != 1 or manifest['tag'] != manifest['version'] or
         not isinstance(manifest['assets'], dict) or set(manifest['assets']) != set(release.TARGETS)):
-        raise ValueError('Use an exact, unprefixed five-target release manifest.')
+        raise ValueError('Use an exact, unprefixed four-target release manifest.')
     revision = release.version(manifest['version']); release.commit(manifest['sourceCommit'])
     for target, asset in manifest['assets'].items():
         if (not isinstance(asset, dict) or set(asset) != {'fileName', 'size', 'sha256'} or
@@ -88,7 +88,7 @@ def main():
     parser.add_argument('--repository', default='controlresell/cli')
     args = parser.parse_args()
     generate(args.bundle, args.public_key, args.repository)
-    print('Generated version-pinned installers from the verified five-target bundle.')
+    print('Generated version-pinned installers from the verified four-target bundle.')
 
 
 if __name__ == '__main__': main()

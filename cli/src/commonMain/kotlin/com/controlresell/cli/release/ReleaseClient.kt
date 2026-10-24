@@ -289,7 +289,7 @@ class ReleaseClient(
         const val LOOKUP_BUDGET = 15_000L
         const val METADATA_BUDGET = 60_000L
         const val BINARY_BUDGET = 300_000L
-        /** A release JSON lists every asset (a few KB for this CLI's five binaries and manifest). */
+        /** A release JSON lists every asset (a few KB for this CLI's four binaries and manifest). */
         const val MAX_RELEASE_JSON_BYTES = 1024 * 1024
     }
 }
