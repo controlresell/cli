@@ -73,6 +73,11 @@ cr items listings ITEM_ID
 cr orders list [--bucket to_send|to_pickup] [--platform VINTED] [--account ACCOUNT_ID] [--from 2026-10-01T00:00:00Z] [--to ...]
 cr orders get ORDER_ID
 cr orders labels ORDER_ID
+cr catalogs categories [--parent CATEGORY_ID] [--platform VINTED]
+cr catalogs category CATEGORY_ID
+cr catalogs fields CATEGORY_ID
+cr catalogs brands [--q nik]
+cr catalogs sizes|colors|conditions|package-sizes|materials [--category CATEGORY_ID]
 cr conversations list [--unread true|false] [--account ACCOUNT_ID]
 cr conversations get CONVERSATION_ID
 cr conversations messages CONVERSATION_ID
@@ -84,6 +89,19 @@ cr items republish ITEM_ID [--account ACCOUNT_ID] [--price-variation -5] [--allo
 cr items delete ITEM_ID [--yes]
 cr conversations send CONVERSATION_ID --text "Hello!"
 cr conversations offer CONVERSATION_ID --price 12.50 --currency EUR [--transaction TRANSACTION_ID]
+cr webhooks list
+cr webhooks get ENDPOINT_ID
+cr webhooks create --url https://example.com/hooks --event item.sold [--event ...] [--description D] [--payload light|full]
+cr webhooks update ENDPOINT_ID [--url U] [--event ...] [--description D] [--payload light|full] [--enable|--disable]
+cr webhooks delete ENDPOINT_ID [--yes]
+cr webhooks secret ENDPOINT_ID
+cr webhooks rotate-secret ENDPOINT_ID [--expires-in-hours 24]
+cr webhooks test ENDPOINT_ID
+cr webhooks deliveries ENDPOINT_ID [--status pending|delivered|failed] [--type item.sold]
+cr webhooks retry ENDPOINT_ID DELIVERY_ID
+cr webhooks recover ENDPOINT_ID --since 2026-10-23T00:00:00Z
+cr webhooks events [--since 2026-10-23T00:00:00Z] [--type item.sold ...]
+cr webhooks event-types
 cr version
 ```
 
