@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       full_validation:
-        description: 'Run all five native platforms and signed installation acceptance (paid macOS/Windows runners)'
+        description: 'Run all four native platforms and signed installation acceptance (paid macOS/Windows runners)'
         type: boolean
         default: false
       validation_version:
@@ -66,7 +66,6 @@ jobs:
         run: |
           case "$(uname -s)-$(uname -m)" in
             Darwin-arm64) target=MacosArm64; directory=macosArm64; asset=macos-arm64 ;;
-            Darwin-x86_64) target=MacosX64; directory=macosX64; asset=macos-x64 ;;
             Linux-x86_64) target=LinuxX64; directory=linuxX64; asset=linux-x64 ;;
             *) echo 'Unsupported runner architecture'; exit 1 ;;
           esac
@@ -159,10 +158,6 @@ jobs:
             target: LinuxArm64
             directory: linuxArm64
             asset: linux-arm64
-          - os: macos-latest
-            target: MacosX64
-            directory: macosX64
-            asset: macos-x64
     runs-on: ${{ matrix.os }}
     env:
       NATIVE_TARGET: ${{ matrix.target }}
@@ -207,10 +202,6 @@ jobs:
             directory: linuxArm64
             asset: linux-arm64
             architecture: aarch64
-          - os: macos-15-intel
-            directory: macosX64
-            asset: macos-x64
-            architecture: x86_64
     runs-on: ${{ matrix.os }}
     env:
       NATIVE_DIRECTORY: ${{ matrix.directory }}
@@ -271,7 +262,7 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: staged
-      - name: Verify and assemble all five tested targets
+      - name: Verify and assemble all four tested targets
         run: python3 scripts/release-bundle.py assemble --inputs staged --version "${ORG_GRADLE_PROJECT_controlresellCliVersion}" --commit "$GITHUB_SHA" --output dist
       - uses: actions/upload-artifact@v4
         with:
@@ -283,7 +274,7 @@ jobs:
           pattern: installation-release-*
           merge-multiple: true
           path: installation-staged
-      - name: Verify and assemble all five distinct-version baselines
+      - name: Verify and assemble all four distinct-version baselines
         run: python3 scripts/release-bundle.py assemble --inputs installation-staged --version "$CONTROLRESELL_INSTALLATION_VERSION" --commit "$GITHUB_SHA" --output installation-dist
       - uses: actions/upload-artifact@v4
         with:
@@ -338,9 +329,6 @@ jobs:
           - os: macos-latest
             target: macos-arm64
             architecture: arm64
-          - os: macos-15-intel
-            target: macos-x64
-            architecture: x86_64
           - os: ubuntu-24.04
             target: linux-x64
             architecture: x86_64

@@ -183,14 +183,14 @@ repository first:
 ```sh
 scripts/publish-sdk-locally.sh
 ./gradlew :cli:jvmTest
-./gradlew :cli:linkReleaseExecutableMacosArm64   # or MacosX64, LinuxX64, LinuxArm64, MingwX64
+./gradlew :cli:linkReleaseExecutableMacosArm64   # or LinuxX64, LinuxArm64, MingwX64
 python3 scripts/smoke-native.py --binary cli/build/bin/macosArm64/releaseExecutable/cr.kexe
 ```
 
 `smoke-native.py` runs the native executable against a local fake of the public API (`scripts/fake-api.py`), with an
 isolated configuration directory and synthetic keys. Tests never call the real API.
 
-Pull requests run the JVM tests. Native tests, signed bundles and installation acceptance on all five targets run on
+Pull requests run the JVM tests. Native tests, signed bundles and installation acceptance on all four targets run on
 version tags and on a manual full validation; publishing a release is a separate, manual step.
 
 ## Security and contributing

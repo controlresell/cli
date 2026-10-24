@@ -41,7 +41,7 @@ class BootstrapGenerationTest(unittest.TestCase):
         (root / 'manifest.sig').unlink(missing_ok=True)
         bootstrap.signing.sign(root / 'manifest.json', self.private, self.public, root / 'manifest.sig')
 
-    def test_generation_requires_exact_signed_five_target_payloads_and_pins_every_file(self):
+    def test_generation_requires_exact_signed_four_target_payloads_and_pins_every_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); manifest = self.bundle(root)
             scripts = bootstrap.generate(root, self.public)
@@ -150,7 +150,7 @@ destination.write_bytes(pathlib.Path(os.environ['CONTROLRESELL_TEST_BUNDLE'], na
 
     def test_all_posix_targets_use_exact_pinned_https_assets_and_literal_native_arguments(self):
         for system, machine, target in [('Linux', 'x86_64', 'linux-x64'), ('Linux', 'aarch64', 'linux-arm64'),
-                                        ('Darwin', 'x86_64', 'macos-x64'), ('Darwin', 'arm64', 'macos-arm64')]:
+                                        ('Darwin', 'arm64', 'macos-arm64')]:
             with self.subTest(target=target):
                 for call in self.calls.iterdir(): call.unlink()
                 result = self.run_installer(CONTROLRESELL_TEST_SYSTEM=system, CONTROLRESELL_TEST_MACHINE=machine)
@@ -187,6 +187,10 @@ destination.write_bytes(pathlib.Path(os.environ['CONTROLRESELL_TEST_BUNDLE'], na
         self.assertIn(b'macos-arm64', result.stdout)
         self.assertEqual([], list(self.calls.iterdir()))
         self.execution.unlink()
+        result = self.run_installer(CONTROLRESELL_INSTALL_BUNDLE=str(self.bundle), CONTROLRESELL_TEST_SYSTEM='Darwin', CONTROLRESELL_TEST_MACHINE='x86_64')
+        self.assertNotEqual(0, result.returncode); self.assertFalse(self.execution.exists())
+        self.assertIn(b'macOS on Intel is no longer supported', result.stderr)
+        self.assertEqual([], list(self.calls.iterdir()))
         result = self.run_installer(CONTROLRESELL_TEST_UID='0')
         self.assertNotEqual(0, result.returncode); self.assertFalse(self.execution.exists())
         result = self.run_installer(CONTROLRESELL_TEST_MACHINE='riscv64')
