@@ -41,14 +41,16 @@ fun networkFailure(error: Throwable): NetworkFailure? {
         darwin && darwinCodes.any { text.contains("Code=$it ") || text.contains("Code=$it\"") || text.endsWith("Code=$it") } ||
             winHttp && winHttpCodes.any { Regex("(^|\\D)$it(\\D|$)").containsMatchIn(text) }
     return when {
-        // Before DNS: curl's "Could not resolve proxy" is a proxy failure.
-        // curl's own proxy errors first: "Could not resolve proxy" would otherwise read as DNS.
+        // Text fallback, only when no exception type named the family. curl's own proxy errors first ("Could not resolve
+        // proxy" would otherwise read as DNS), then the connection-phase wording (a host name such as `proxy-SSL-gw` in
+        // "Failed to connect to ..." must not read as TLS), then TLS, and the generic proxy wording last (a Darwin
+        // certificate error "via web proxy" is a TLS failure).
         mentions(CURL_PROXY_TEXT) -> NetworkFailure.PROXY
-        mentions(TLS_TEXT) || code(listOf(-1200, -1201, -1202, -1203, -1204, -1205, -1206, -2000), listOf(12175, 12037, 12038, 12044, 12045, 12057, 12169)) -> NetworkFailure.TLS
         mentions(DNS_TEXT) || code(listOf(-1003, -1006), listOf(12007)) -> NetworkFailure.DNS
-        mentions(TIMEOUT_TEXT) || code(listOf(-1001), listOf(12002)) -> NetworkFailure.TIMEOUT
-        mentions(PROXY_TEXT) -> NetworkFailure.PROXY
         mentions(REFUSED_TEXT) || code(listOf(-1004, -1009, -1005), listOf(12029, 12030)) -> NetworkFailure.REFUSED
+        mentions(TIMEOUT_TEXT) || code(listOf(-1001), listOf(12002)) -> NetworkFailure.TIMEOUT
+        mentions(TLS_TEXT) || code(listOf(-1200, -1201, -1202, -1203, -1204, -1205, -1206, -2000), listOf(12175, 12037, 12038, 12044, 12045, 12057, 12169)) -> NetworkFailure.TLS
+        mentions(PROXY_TEXT) -> NetworkFailure.PROXY
         else -> NetworkFailure.OTHER
     }
 }
@@ -73,11 +75,12 @@ fun releaseFailureDetail(error: Throwable): String {
 // The origin without any user:password@ part, then the rest of the URL dropped.
 private val URL = Regex("((?:https?|wss?|socks[45]?h?)://)(?:[^/\\s\"'<>?#@]*@)?([^/\\s\"'<>?#@]+)[^\\s\"'<>]*")
 
-// Engines: OkHttp (JVM tests), Curl (Linux), Darwin/NSURLSession (macOS) and WinHTTP (Windows). Case-sensitive on purpose:
-// a lowercase host name such as `tls.example.com` in an engine message must not look like a TLS failure.
 // Any remaining `name:secret@host` (a proxy written without a scheme).
 private val USERINFO = Regex("[^\\s/\"'<>@:]+:[^\\s/\"'<>@]+@")
 
+// Engines: OkHttp (JVM tests), Curl (Linux), Darwin/NSURLSession (macOS) and WinHTTP (Windows). The wording lists below are
+// case-sensitive on purpose: a lowercase host name such as `tls.example.com` in an engine message must not look like a
+// TLS failure.
 private val HTTP_PACKAGES = listOf("io.ktor.", "java.net.", "javax.net.", "okhttp3.", "java.nio.channels.UnresolvedAddress")
 private val ENGINE_NAMES = arrayOf("Curl", "Darwin", "WinHttp")
 private val CURL_TEXT = listOf("CurlRequestData(", "Connection failed for request", "TLS verification failed for request")
