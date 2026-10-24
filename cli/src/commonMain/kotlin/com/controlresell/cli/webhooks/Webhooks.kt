@@ -1,6 +1,8 @@
 package com.controlresell.cli.webhooks
 
 import com.controlresell.cli.CliEnvironment
+import com.controlresell.cli.CliFailure
+import com.controlresell.cli.ExitCode
 import com.controlresell.cli.output.*
 import com.controlresell.sdk.generated.models.WebhookEndpoint
 import com.controlresell.sdk.generated.models.WebhookEndpointCreateRequest
@@ -21,7 +23,10 @@ import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.long
 import com.github.ajalt.clikt.parameters.types.restrictTo
 import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 internal class Webhooks(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "webhooks") {
@@ -141,20 +146,29 @@ private class RotateSecret(private val environment: CliEnvironment) : Suspending
 private class TestEndpoint(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "test") {
     private val id by argument(help = "The endpoint's identifier.")
     private val json by option("--json", help = "Print the API's JSON response.").flag()
-    override fun help(context: Context) = "Send a webhook.test event to an endpoint now and show how it answered. Needs the webhooks:write scope."
-    override suspend fun run() = environment.sdk().use { client ->
-        val response = client.webhooks.testWebhookEndpoint(id)
-        if (json) echo(response.response.bodyAsText().trim())
-        else response.body().let {
-            echo(sheet("Success" to it.success.toString(), "HTTP status" to it.statusCode?.toString(),
-                "Duration" to "${it.durationMs} ms", "Error" to it.error))
+    override fun help(context: Context) =
+        "Send a webhook.test event to an endpoint now and show how it answered; exits with 1 when the endpoint did not accept it. Needs the webhooks:write scope."
+    override suspend fun run() {
+        val success = environment.sdk().use { client ->
+            val response = client.webhooks.testWebhookEndpoint(id)
+            if (json) {
+                val raw = response.response.bodyAsText().trim()
+                echo(raw)
+                ((Json.parseToJsonElement(raw) as? JsonObject)?.get("success") as? JsonPrimitive)?.booleanOrNull == true
+            } else {
+                val result = response.body()
+                echo(sheet("Success" to result.success.toString(), "HTTP status" to result.statusCode?.toString(),
+                    "Duration" to "${result.durationMs} ms", "Error" to result.error))
+                result.success
+            }
         }
+        if (!success) throw CliFailure(ExitCode.FAILURE, "The endpoint did not accept the test event.")
     }
 }
 
 private class ListDeliveries(private val environment: CliEnvironment) : SuspendingCliktCommand(name = "deliveries") {
     private val id by argument(help = "The endpoint's identifier.")
-    private val status by option("--status", help = "Only the deliveries in this status: pending, delivered or failed.")
+    private val status by option("--status", help = "Only the deliveries in this status: pending, delivered or failed.").choice("pending", "delivered", "failed")
     private val type by option("--type", help = "Only the deliveries of this event type.")
     private val paging by Paging()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
@@ -195,11 +209,16 @@ private class RecoverDeliveries(private val environment: CliEnvironment) : Suspe
         val start = parseInstant("--since", since)
         environment.sdk().use { client ->
             val response = client.webhooks.recoverWebhookDeliveries(id, write.key(), WebhookRecoverRequest(since = start))
-            if (json) echo(response.response.bodyAsText().trim())
-            else response.body().let {
-                echo("Queued ${it.count} deliveries again.")
-                if (it.hasMore) echo("More remain: run the same command again.", err = true)
+            val hasMore = if (json) {
+                val raw = response.response.bodyAsText().trim()
+                echo(raw)
+                ((Json.parseToJsonElement(raw) as? JsonObject)?.get("hasMore") as? JsonPrimitive)?.booleanOrNull == true
+            } else {
+                val recovery = response.body()
+                echo("Queued ${recovery.count} deliveries again.")
+                recovery.hasMore
             }
+            if (hasMore) echo("More remain: run the same command again.", err = true)
         }
     }
 }

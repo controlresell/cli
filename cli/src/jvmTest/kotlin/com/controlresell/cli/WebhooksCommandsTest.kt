@@ -92,9 +92,13 @@ class WebhooksCommandsTest {
         assertEquals("failed", cli.requests[0].url.parameters["status"])
         assertEquals(0, cli.run("webhooks", "retry", "e-1", "d1").code)
         assertContains(cli.run("webhooks", "recover", "e-1", "--since", "2026-10-23T00:00:00Z").stdout, "Queued 2 deliveries again.")
-        assertContains(cli.run("webhooks", "test", "e-1").stdout, "http_500")
+        val test = cli.run("webhooks", "test", "e-1")
+        assertContains(test.stdout, "http_500")
+        assertEquals(ExitCode.FAILURE, test.code)
+        assertEquals(ExitCode.FAILURE, cli.run("webhooks", "test", "e-1", "--json").code)
+        assertEquals(ExitCode.USAGE, cli.run("webhooks", "deliveries", "e-1", "--status", "faild").code)
         assertEquals(ExitCode.USAGE, cli.run("webhooks", "recover", "e-1", "--since", "yesterday").code)
-        assertEquals(4, cli.requests.size)
+        assertEquals(5, cli.requests.size)
     }
 
     @Test fun `webhooks event-types prints each type with its scope, and a missing endpoint exits with 4`() = runTest {
