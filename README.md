@@ -164,6 +164,14 @@ macOS, a systemd user timer on Linux, Task Scheduler on Windows); `--automatic s
 it. An update never interrupts a running command: while one runs, activation is deferred to the next attempt. Set
 `CONTROLRESELL_DISABLE_AUTOUPDATE=1` to turn off release checks and automatic updates for a process.
 
+Releases are downloaded through the GitHub API (`api.github.com/repos/controlresell/cli/releases/assets/<id>`), without
+a GitHub login. GitHub limits unauthenticated API requests to 60 per hour per IP address: `cr update --check` costs 3
+requests (the release, `manifest.json`, `manifest.sig`) and `cr update` 4 (plus the binary); the hourly automatic job costs 5 (its check, then the tag lookup and the binary). When the limit is reached,
+the command fails with `release_rate_limited` and says when it resets. Other failures keep a distinct code
+(`release_timeout`, `release_dns_failure`, `release_tls_failure`, `release_proxy_failure`, `release_connection_failure`,
+`release_connection_closed`, `release_response_invalid`, `release_write_failure`, `release_network_failure`) and print a
+short cause.
+
 `cr verify-release --manifest manifest.json --signature manifest.sig [--binary FILE --target TARGET]` verifies a
 downloaded release by hand, without login or network access.
 
