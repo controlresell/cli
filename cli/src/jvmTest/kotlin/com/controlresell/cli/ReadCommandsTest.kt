@@ -164,4 +164,14 @@ class ReadCommandsTest {
         assertEquals(ExitCode.USAGE, cli.run("conversations", "messages", "conv_1", "--to", "yesterday").code)
         assertEquals(count, cli.requests.size)
     }
+
+    @Test fun `conversations list sends the buyer, item and offer status filters, and the sheet shows the buyer id`() = runTest {
+        val cli = CliHarness().apply { signIn() }
+        cli.on(HttpMethod.Get, "/api/public/v1/conversations", body = """{"data":[],"nextCursor":null}""")
+        assertEquals(0, cli.run("conversations", "list", "--buyer", "b-1", "--item", "42", "--offer-status", "PENDING").code)
+        cli.requests.single().url.parameters.let {
+            assertEquals("b-1", it["buyerId"]); assertEquals("42", it["itemId"]); assertEquals("PENDING", it["offerStatus"])
+        }
+        assertEquals(ExitCode.USAGE, cli.run("conversations", "list", "--item", "x").code)
+    }
 }

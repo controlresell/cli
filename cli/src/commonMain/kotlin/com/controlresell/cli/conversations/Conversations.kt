@@ -17,6 +17,7 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.boolean
+import com.github.ajalt.clikt.parameters.types.long
 import io.ktor.client.statement.bodyAsText
 
 internal class Conversations(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "conversations") {
@@ -32,6 +33,9 @@ private class ListConversations(private val environment: CliEnvironment) : Suspe
     private val account by option("--account", help = "Only the conversations of this marketplace account.")
     private val from by option("--from", help = "Only the conversations whose last message is at or after this instant (inclusive), ISO-8601 with its offset, such as 2026-10-01T00:00:00Z.")
     private val to by option("--to", help = "Only the conversations whose last message is before this instant (exclusive), ISO-8601 with its offset.")
+    private val buyer by option("--buyer", help = "Only the conversations with this buyer, by their identifier on the marketplace (the buyerId of a conversation or a favorite).")
+    private val item by option("--item", help = "Only the conversations about this item (a number), through its transactions.").long()
+    private val offerStatus by option("--offer-status", help = "Only the conversations with at least one offer at this status: PENDING, ACCEPTED, REJECTED or CANCELED.")
     private val paging by Paging()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "List the conversations, most recently updated first."
@@ -40,7 +44,8 @@ private class ListConversations(private val environment: CliEnvironment) : Suspe
         environment.sdk().use { client ->
         printList(paging, json, fetch = { cursor, limit ->
             fetchPage(client.conversations.listConversations(limit = limit, cursor = cursor, unread = unread, accountId = account,
-                from = start, to = end), { it.`data` }, { it.nextCursor }, json)
+                from = start, to = end, buyerId = buyer, itemId = item, offerStatus = offerStatus),
+                { it.`data` }, { it.nextCursor }, json)
         }, render = { conversations ->
             terminal.table(listOf("ID", "Account", "Buyer", "Unread", "Last message", "Updated"), conversations.map {
                 listOf(it.id, it.accountId, it.buyerLogin, if (it.unread) "yes" else "no", short(it.lastMessage?.let(::text)), date(it.updatedAt))
@@ -135,6 +140,7 @@ internal fun conversation(conversation: Conversation) = sheet(
     "Account" to conversation.accountId,
     "Platform" to conversation.platform,
     "Buyer" to conversation.buyerLogin,
+    "Buyer ID" to conversation.buyerId,
     "Unread" to if (conversation.unread) "yes" else "no",
     "Pinned" to if (conversation.pinned) "yes" else "no",
     "Last message" to short(conversation.lastMessage?.let(::text), 200),
