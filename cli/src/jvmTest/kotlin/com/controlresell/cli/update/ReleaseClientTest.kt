@@ -219,6 +219,8 @@ class ReleaseClientTest {
             assertEquals("GitHub API rate limit reached, it resets in about 10 minutes", error.detail)
         }
         client { respond("", HttpStatusCode.TooManyRequests, headersOf("x-ratelimit-remaining", "0")) }.use { transport -> failure("release_rate_limited") { transport.latestVersion() } }
+        // GitHub's secondary limit: 403 with Retry-After and requests still remaining.
+        client { respond("", HttpStatusCode.Forbidden, headersOf("retry-after" to listOf("60"), "x-ratelimit-remaining" to listOf("37"))) }.use { transport -> failure("release_rate_limited") { transport.latestVersion() } }
         assertTrue(releaseFailureDetail(IllegalStateException("x".repeat(500))).length <= 200)
         assertEquals("DarwinHttpRequestException: Error Domain=NSURLErrorDomain Code=-1003 \"A server with the specified hostname could not be found.\"",
             releaseFailureDetail(DarwinHttpRequestException("Error Domain=NSURLErrorDomain Code=-1003 \"A server with the specified hostname could not be found.\" UserInfo={NSErrorFailingURLKey=https://release-assets.githubusercontent.com/a?sig=SECRET}")))
@@ -263,6 +265,7 @@ class ReleaseClientTest {
                 transport.binary("1.0.0", "linux-x64", 6) { _, _ -> throw kotlinx.io.IOException("No space left on device") }
             }
             assertEquals("release_write_failure", error.code)
+            assertEquals("IOException", error.detail) // never the message, which can name a local path
         }
     }
 

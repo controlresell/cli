@@ -123,7 +123,7 @@ fun main(args: Array<String>): Unit = runBlocking {
 
 expect object SystemExit { fun fail(message: String, code: Int = 1): Nothing; fun exit(code: Int): Nothing; fun notice(message: String) }
 
-/** Safe operation identifiers only; never print raw platform/HTTP exception messages. */
+/** Safe operation identifiers only; the optional [detail] is a redacted, bounded cause (see releaseFailureDetail), never a raw exception message. */
 class CliOperationException(val code: String, val detail: String? = null) : Exception() {
     init { require(Regex("[a-zA-Z0-9_]{1,120}").matches(code)) }
 }

@@ -196,7 +196,8 @@ class ReleaseClient(
                 } else if (absentAllowed && response.status == HttpStatusCode.NotFound) {
                     complete = true
                 } else {
-                    if ((response.status.value == 403 || response.status.value == 429) && response.headers["x-ratelimit-remaining"] == "0")
+                    if ((response.status.value == 403 || response.status.value == 429) &&
+                        (response.headers["x-ratelimit-remaining"] == "0" || response.headers["retry-after"] != null))
                         throw ReleaseDownloadException("release_rate_limited", rateLimitDetail(response.headers["x-ratelimit-reset"]))
                     if (response.status != HttpStatusCode.OK) throw ReleaseDownloadException("release_http_${response.status.value}")
                     if (response.headers[HttpHeaders.ContentEncoding]?.lowercase()?.let { it != "identity" } == true)
@@ -252,7 +253,7 @@ class ReleaseClient(
     catch (error: CancellationException) { throw error }
     catch (error: ReleaseDownloadException) { throw error }
     catch (error: Exception) {
-        if (error is okio.IOException || error is kotlinx.io.IOException) throw ReleaseDownloadException("release_write_failure", releaseFailureDetail(error))
+        if (error is okio.IOException || error is kotlinx.io.IOException) throw ReleaseDownloadException("release_write_failure", error::class.simpleName ?: "IOException")
         throw SinkFailure(error)
     }
 
@@ -264,7 +265,13 @@ class ReleaseClient(
         currentCoroutineContext().ensureActive()
         throw ReleaseDownloadException("release_timeout", "the download did not finish within its time budget")
     }
-    catch (error: CancellationException) { throw error }
+    catch (error: CancellationException) {
+        // A request timeout fired by ktor while the body is read cancels the call, not the caller.
+        currentCoroutineContext().ensureActive()
+        if (generateSequence(error as Throwable) { it.cause }.take(8).any { it is io.ktor.client.plugins.HttpRequestTimeoutException })
+            throw ReleaseDownloadException("release_timeout", "the download did not finish within its time budget")
+        throw error
+    }
     catch (error: ReleaseDownloadException) { throw error }
     catch (error: SinkFailure) { throw error.original }
     catch (error: Exception) { throw ReleaseDownloadException(releaseFailureCode(error), releaseFailureDetail(error)) }
@@ -280,7 +287,7 @@ class ReleaseClient(
 
     private companion object {
         const val LOOKUP_BUDGET = 15_000L
-        const val METADATA_BUDGET = 30_000L
+        const val METADATA_BUDGET = 60_000L
         const val BINARY_BUDGET = 300_000L
         /** A release JSON lists every asset (a few KB for this CLI's five binaries and manifest). */
         const val MAX_RELEASE_JSON_BYTES = 1024 * 1024
