@@ -1,6 +1,7 @@
 package com.controlresell.cli.items
 
 import com.controlresell.cli.CliEnvironment
+import com.controlresell.cli.favorites.ItemFavorites
 import com.controlresell.cli.output.*
 import com.controlresell.sdk.generated.models.Item
 import com.controlresell.sdk.generated.models.ItemAttribute
@@ -32,7 +33,7 @@ import kotlin.time.Instant
 internal class Items(environment: CliEnvironment) : SuspendingNoOpCliktCommand(name = "items") {
     override fun help(context: Context) = "The items of the seller's stock."
     init {
-        subcommands(ListItems(environment), GetItem(environment), ItemListings(environment), CreateItem(environment), UpdateItem(environment), PublishItem(environment),
+        subcommands(ListItems(environment), GetItem(environment), ItemListings(environment), ItemFavorites(environment), CreateItem(environment), UpdateItem(environment), PublishItem(environment),
             PriceDropItem(environment), RepublishItem(environment), DeleteItem(environment))
     }
 }

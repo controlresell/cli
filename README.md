@@ -78,7 +78,9 @@ cr catalogs category CATEGORY_ID
 cr catalogs fields CATEGORY_ID
 cr catalogs brands [--q nik]
 cr catalogs sizes|colors|conditions|package-sizes|materials [--category CATEGORY_ID]
-cr conversations list [--unread true|false] [--account ACCOUNT_ID]
+cr favorites list [--account ACCOUNT_ID] [--item ITEM_ID] [--from 2026-10-01T00:00:00Z] [--to ...]
+cr items favorites ITEM_ID [--from ...] [--to ...]
+cr conversations list [--unread true|false] [--account ACCOUNT_ID] [--buyer BUYER_ID] [--item ITEM_ID] [--offer-status PENDING|ACCEPTED|REJECTED|CANCELED]
 cr conversations get CONVERSATION_ID
 cr conversations messages CONVERSATION_ID
 cr items create --name NAME [--sku S] [--description D] [--photo-id ID ...] [--category-id N] [--brand-id N] [--size-id N] [--color-id N ...] [--package-size-id N] [--material-id N ...] [--measurement-length CM] [--measurement-width CM] [--enum KEY=VALUE ...] [--attribute KEY=VALUE ...] [--custom-field ID=VALUE ...] [--purchase-place-id N] [--selling-place-id N] [--state N] [--sex S] [--label L ...] [--sold true|false] [--estimated-price 12.50] [--purchase-price P] [--selling-price P] [--purchase-date T] [--selling-date T] [--currency EUR]
