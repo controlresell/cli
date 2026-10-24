@@ -170,8 +170,7 @@ requests (the release, `manifest.json`, `manifest.sig`) and `cr update` 4 (plus 
 the command fails with `release_rate_limited` and says when it resets. Other failures keep a distinct code
 (`release_timeout`, `release_dns_failure`, `release_tls_failure`, `release_proxy_failure`, `release_connection_failure`,
 `release_connection_closed`, `release_response_invalid`, `release_write_failure`, `release_network_failure`) and print a
-short cause. Versions up to 0.1.x cannot update on Linux and Windows (GitHub's redirect for `releases/download` carries a
-header larger than their HTTP client accepts): reinstall once with the install script.
+short cause.
 
 `cr verify-release --manifest manifest.json --signature manifest.sig [--binary FILE --target TARGET]` verifies a
 downloaded release by hand, without login or network access.
