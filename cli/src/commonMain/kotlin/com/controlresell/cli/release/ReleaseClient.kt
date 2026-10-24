@@ -167,10 +167,10 @@ class ReleaseClient(
     }
 
     private suspend fun readBounded(response: HttpResponse, limit: Int): ByteArray {
-        val bytes = ByteArray(limit)
-        var count = 0
-        read(response, limit.toLong(), exact = false) { buffer, size -> buffer.copyInto(bytes, count, 0, size); count += size }
-        return bytes.copyOf(count)
+        // Grows with the body actually received; read() already refuses anything over [limit].
+        val collected = okio.Buffer()
+        read(response, limit.toLong(), exact = false) { buffer, size -> collected.write(buffer, 0, size) }
+        return collected.readByteArray()
     }
 
     private suspend fun request(address: String, kind: Kind, budget: Long, absentAllowed: Boolean, receive: suspend (HttpResponse) -> Unit) {
