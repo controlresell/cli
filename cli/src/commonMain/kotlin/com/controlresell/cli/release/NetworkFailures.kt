@@ -42,14 +42,15 @@ fun networkFailure(error: Throwable): NetworkFailure? {
             winHttp && winHttpCodes.any { Regex("(^|\\D)$it(\\D|$)").containsMatchIn(text) }
     return when {
         // Text fallback, only when no exception type named the family. curl's own proxy errors first ("Could not resolve
-        // proxy" would otherwise read as DNS), then the connection-phase wording (a host name such as `proxy-SSL-gw` in
-        // "Failed to connect to ..." must not read as TLS), then TLS, and the generic proxy wording last (a Darwin
-        // certificate error "via web proxy" is a TLS failure).
+        // proxy" would otherwise read as DNS). Then TLS by its specific phrases (never a bare "SSL" or "TLS", which a host
+        // name such as `proxy-SSL-gw` contains), so a certificate problem is not hidden behind a connection hint; then the
+        // connection phase, timeout before refused ("Failed to connect ... Timeout was reached" is a timeout); the generic
+        // proxy wording last.
         mentions(CURL_PROXY_TEXT) -> NetworkFailure.PROXY
-        mentions(DNS_TEXT) || code(listOf(-1003, -1006), listOf(12007)) -> NetworkFailure.DNS
-        mentions(REFUSED_TEXT) || code(listOf(-1004, -1009, -1005), listOf(12029, 12030)) -> NetworkFailure.REFUSED
-        mentions(TIMEOUT_TEXT) || code(listOf(-1001), listOf(12002)) -> NetworkFailure.TIMEOUT
         mentions(TLS_TEXT) || code(listOf(-1200, -1201, -1202, -1203, -1204, -1205, -1206, -2000), listOf(12175, 12037, 12038, 12044, 12045, 12057, 12169)) -> NetworkFailure.TLS
+        mentions(DNS_TEXT) || code(listOf(-1003, -1006), listOf(12007)) -> NetworkFailure.DNS
+        mentions(TIMEOUT_TEXT) || code(listOf(-1001), listOf(12002)) -> NetworkFailure.TIMEOUT
+        mentions(REFUSED_TEXT) || code(listOf(-1004, -1009, -1005), listOf(12029, 12030)) -> NetworkFailure.REFUSED
         mentions(PROXY_TEXT) -> NetworkFailure.PROXY
         else -> NetworkFailure.OTHER
     }
@@ -88,7 +89,8 @@ private val CURL_TEXT = listOf("CurlRequestData(", "Connection failed for reques
 private val HEADER_TEXT = listOf("Header line length limit exceeded", "Failed to parse response header")
 private val CURL_PROXY_TEXT = listOf("resolve proxy", "from proxy after CONNECT", "CONNECT tunnel failed", "Proxy CONNECT aborted")
 private val PROXY_TEXT = listOf("proxy server", "web proxy", "Proxy Authentication")
-private val TLS_TEXT = listOf("SSL", "TLS", "certificate", "Certificate", "security error")
+private val TLS_TEXT = listOf("SSL peer", "SSL connect", "SSL certificate", "SSL error", "SSL handshake", "SSL: ", "TLS error", "TLS verification",
+    "TLS handshake", "certificate", "Certificate", "security error")
 private val DNS_TEXT = listOf("resolve host", "Could not resolve", "Couldn't resolve", "could not be resolved", "Unable to resolve", "nodename nor servname",
     "Name or service not known")
 private val TIMEOUT_TEXT = listOf("timed out", "Timeout was reached")

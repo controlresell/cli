@@ -146,6 +146,13 @@ class ReleaseClientTest {
         client { respond("x".repeat(1024 * 1024 + 1)) }.use { transport -> failure("release_size_invalid") { transport.latestVersion() } }
     }
 
+    @Test fun jsonAndMetadataReadsHandleEmptyExactAndOverLimitBodies() = runBlocking {
+        val names = listOf("manifest.json", "manifest.sig")
+        client(releaseServer("1.0.0", names) { respond("") }).use { assertEquals(0, it.metadata("1.0.0").manifest.size) }
+        client(releaseServer("1.0.0", names) { respond("x".repeat(2048)) }).use { assertEquals(2048, it.metadata("1.0.0").signature.size) }
+        client(releaseServer("1.0.0", names) { respond("x".repeat(2049)) }).use { failure("release_size_invalid") { it.metadata("1.0.0") } }
+    }
+
     @Test fun exactBinarySizeIsStreamedWithoutDeliveringOverflowBytes() = runBlocking {
         val received = mutableListOf<Byte>()
         client(releaseServer("1.0.0", listOf("cr-1.0.0-linux-x64", "cr-1.0.0-windows-x64.exe")) { request ->

@@ -31,6 +31,14 @@ class NetworkFailuresTest {
             networkFailure(CurlIllegalStateException("Connection failed for request. Reason: Connection timed out after 10000 ms to SSL.example")))
     }
 
+    @Test fun theMostSpecificFamilyWinsWhenTheWordingMentionsSeveral() {
+        fun curl(reason: String) = CurlIllegalStateException("Connection failed for request. Reason: $reason")
+        assertEquals(NetworkFailure.TIMEOUT, networkFailure(curl("Failed to connect to api.github.com port 443 after 10001 ms: Timeout was reached")))
+        assertEquals(NetworkFailure.TLS, networkFailure(curl("SSL connect error: connection timed out during the handshake")))
+        assertEquals(NetworkFailure.TLS, networkFailure(curl("SSL certificate problem, Failed to connect afterwards")))
+        assertEquals(NetworkFailure.TIMEOUT, networkFailure(DarwinHttpRequestException("The request timed out, via web proxy")))
+    }
+
     @Test fun theWordingIsOnlyAFallbackPerFamily() {
         fun curl(reason: String) = CurlIllegalStateException("Connection failed for request. Reason: $reason")
         assertEquals(NetworkFailure.PROXY, networkFailure(curl("Could not resolve proxy: p.corp")))
