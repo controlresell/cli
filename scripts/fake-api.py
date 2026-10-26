@@ -13,6 +13,7 @@ PREFIX = '/api/public/v1'
 ME = {'id': 42, 'username': 'smoke-seller', 'currency': 'EUR'}
 ACCOUNTS = [{'id': f'acc_{n}', 'platform': 'vinted', 'name': f'Account {n}', 'status': 'CONNECTED'} for n in range(1, 4)]
 ITEMS = [{'id': n, 'name': f'Item {n}', 'photos': [], 'colorIds': [], 'labels': [], 'sold': n % 2 == 0,
+          'materialIds': [], 'enumValues': [], 'attributes': [], 'customFields': [],
           'createdAt': '2026-10-01T10:00:00Z', 'updatedAt': '2026-10-02T10:00:00Z',
           'sellingPrice': {'amount': f'{n}.50', 'currency': 'EUR'}} for n in range(1, 6)]
 LISTINGS = [{'id': 'lst_1', 'itemId': 1, 'accountId': 'acc_1', 'platformId': '9001', 'url': 'https://example.com/items/9001',
