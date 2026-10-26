@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the real native CLI against a local fake of the public API; never contact ControlResell.
 
-Usage: python3 scripts/smoke-native.py --binary path/to/cr.kexe [--expected-version 0.1.0]
+Usage: python3 scripts/smoke-native.py --binary path/to/cr.kexe [--expected-version 1.0.0]
 Only subprocesses created by this script are terminated. Uses an isolated XDG directory.
 """
 import argparse

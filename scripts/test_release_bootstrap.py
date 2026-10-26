@@ -29,10 +29,10 @@ class BootstrapGenerationTest(unittest.TestCase):
     def bundle(self, root):
         assets = {}
         for target in bootstrap.release.TARGETS:
-            name = bootstrap.release.asset_name('0.1.0', target)
+            name = bootstrap.release.asset_name('1.0.0', target)
             path = root / name; path.write_bytes(native_header(target))
             assets[target] = dict(fileName=name, sha256=bootstrap.release.digest(path), size=path.stat().st_size)
-        manifest = dict(schemaVersion=1, version='0.1.0', tag='0.1.0', sourceCommit='a' * 40, assets=assets)
+        manifest = dict(schemaVersion=1, version='1.0.0', tag='1.0.0', sourceCommit='a' * 40, assets=assets)
         (root / 'manifest.json').write_text(json.dumps(manifest))
         self.sign(root)
         return manifest
@@ -50,8 +50,8 @@ class BootstrapGenerationTest(unittest.TestCase):
                 self.assertEqual(data, (root / name).read_bytes())
                 text = data.decode('utf-8-sig')
                 self.assertNotIn('@@', text)
-                self.assertIn('/releases/download/0.1.0', text)
-                self.assertNotIn('/releases/download/v0.1.0', text)
+                self.assertIn('/releases/download/1.0.0', text)
+                self.assertNotIn('/releases/download/v1.0.0', text)
                 for metadata in ('manifest.json', 'manifest.sig'):
                     self.assertIn(bootstrap.release.digest(root / metadata), text)
                 for target, asset in manifest['assets'].items():
@@ -71,7 +71,7 @@ class BootstrapGenerationTest(unittest.TestCase):
                 elif mutation == 'symlink':
                     binary.rename(root / 'outside'); binary.symlink_to(root / 'outside')
                 else:
-                    if mutation == 'prefixed': manifest['tag'] = 'v0.1.0'
+                    if mutation == 'prefixed': manifest['tag'] = 'v1.0.0'
                     elif mutation == 'missing': del manifest['assets'][target]
                     elif mutation == 'traversal': asset['fileName'] = '../outside'
                     elif mutation == 'boolean-size': asset['size'] = True
@@ -112,10 +112,10 @@ sys.exit(int(os.environ.get('CONTROLRESELL_TEST_EXIT', '0')))
         executable += b'\n#' + b'fixture-padding' * 160 + b'\n'
         assets = {}
         for target in bootstrap.release.TARGETS:
-            name = bootstrap.release.asset_name('0.1.0', target)
+            name = bootstrap.release.asset_name('1.0.0', target)
             (self.bundle / name).write_bytes(executable)
             assets[target] = dict(fileName=name, size=len(executable), sha256=hashlib.sha256(executable).hexdigest())
-        self.manifest = dict(schemaVersion=1, version='0.1.0', tag='0.1.0', sourceCommit='a' * 40, assets=assets)
+        self.manifest = dict(schemaVersion=1, version='1.0.0', tag='1.0.0', sourceCommit='a' * 40, assets=assets)
         metadata = json.dumps(self.manifest).encode()
         signature = b'unit-flow-envelope'.ljust(700, b' ')
         (self.bundle / 'manifest.json').write_bytes(metadata); (self.bundle / 'manifest.sig').write_bytes(signature)
@@ -156,7 +156,7 @@ destination.write_bytes(pathlib.Path(os.environ['CONTROLRESELL_TEST_BUNDLE'], na
                 result = self.run_installer(CONTROLRESELL_TEST_SYSTEM=system, CONTROLRESELL_TEST_MACHINE=machine)
                 self.assertEqual(0, result.returncode, result.stderr.decode())
                 arguments = json.loads(self.execution.read_text())
-                self.assertEqual(['install', '--version', '0.1.0', '--bundle'], arguments[:4])
+                self.assertEqual(['install', '--version', '1.0.0', '--bundle'], arguments[:4])
                 self.assertEqual(['--root', self.env['CONTROLRESELL_INSTALL_ROOT']], arguments[-2:])
                 name = self.manifest['assets'][target]['fileName']
                 self.assertEqual({'manifest.json', 'manifest.sig', name}, {p.name for p in self.calls.iterdir()})
@@ -167,7 +167,7 @@ destination.write_bytes(pathlib.Path(os.environ['CONTROLRESELL_TEST_BUNDLE'], na
                     self.assertEqual('=https', curl[curl.index('--proto-redir') + 1])
                     self.assertEqual('120', curl[curl.index('--max-time') + 1])
                     self.assertEqual('5', curl[curl.index('--max-redirs') + 1])
-                    self.assertEqual('https://github.com/controlresell/cli/releases/download/0.1.0/' + call.name, curl[-1])
+                    self.assertEqual('https://github.com/controlresell/cli/releases/download/1.0.0/' + call.name, curl[-1])
 
     def test_tampered_metadata_or_binary_and_download_errors_cannot_start_an_executable(self):
         originals = {p.name: p.read_bytes() for p in self.bundle.iterdir()}
@@ -202,7 +202,7 @@ destination.write_bytes(pathlib.Path(os.environ['CONTROLRESELL_TEST_BUNDLE'], na
 class PowerShellBootstrapTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which('pwsh'), 'PowerShell 7 is needed for portable HTTP-helper acceptance')
     def test_powershell_parsing_and_bounded_https_downloads_without_real_network(self):
-        manifest = dict(version='0.1.0', assets={target: dict(fileName=bootstrap.release.asset_name('0.1.0', target),
+        manifest = dict(version='1.0.0', assets={target: dict(fileName=bootstrap.release.asset_name('1.0.0', target),
                         size=256, sha256='a' * 64) for target in bootstrap.release.TARGETS})
         with tempfile.TemporaryDirectory(prefix='controlresell-bootstrap-powershell-') as directory:
             template = Path(directory) / 'install.ps1'

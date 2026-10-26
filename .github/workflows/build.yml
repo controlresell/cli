@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
 env:
-  ORG_GRADLE_PROJECT_controlresellCliVersion: ${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.full_validation && inputs.validation_version) || '0.1.0-SNAPSHOT' }}
+  ORG_GRADLE_PROJECT_controlresellCliVersion: ${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && inputs.full_validation && inputs.validation_version) || '1.0.0-SNAPSHOT' }}
   CONTROLRESELL_INSTALLATION_VERSION: 0.0.0-installation.g${{ github.sha }}
 permissions:
   contents: read
