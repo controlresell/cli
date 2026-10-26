@@ -2,6 +2,8 @@
 """A local stand-in for the ControlResell public API, for the native smoke tests. Loopback HTTP only.
 
 Usage: python3 scripts/fake-api.py --port PORT --key API_KEY --log FILE
+       python3 scripts/fake-api.py --dump   (print every payload it serves as one JSON object and exit; the JVM test
+                                             SmokeFakeApiContractTest decodes them with the pinned Kotlin SDK models)
 Every request is appended to the log as one JSON line (method, path, query, headers).
 """
 import argparse
@@ -12,8 +14,12 @@ from urllib.parse import parse_qs, urlsplit
 PREFIX = '/api/public/v1'
 ME = {'id': 42, 'username': 'smoke-seller', 'currency': 'EUR'}
 ACCOUNTS = [{'id': f'acc_{n}', 'platform': 'vinted', 'name': f'Account {n}', 'status': 'CONNECTED'} for n in range(1, 4)]
-ITEMS = [{'id': n, 'name': f'Item {n}', 'photos': [], 'colorIds': [], 'labels': [], 'sold': n % 2 == 0,
-          'materialIds': [], 'enumValues': [], 'attributes': [], 'customFields': [],
+# The nested lists are not empty so that the types inside them (ItemPhoto, ItemEnumValue, ItemAttribute,
+# ItemCustomField) are decoded by the contract test too.
+ITEMS = [{'id': n, 'name': f'Item {n}', 'photos': [{'id': f'photo_{n}', 'index': 0, 'url': f'https://example.com/photos/{n}.jpg'}],
+          'colorIds': [1], 'labels': ['smoke'], 'sold': n % 2 == 0,
+          'materialIds': [2], 'enumValues': [{'enumKey': 'season', 'enumValue': 'SUMMER'}],
+          'attributes': [{'fieldKey': 'brand_note', 'value': 'vintage'}], 'customFields': [{'fieldId': 7, 'value': 'shelf A'}],
           'createdAt': '2026-10-01T10:00:00Z', 'updatedAt': '2026-10-02T10:00:00Z',
           'sellingPrice': {'amount': f'{n}.50', 'currency': 'EUR'}} for n in range(1, 6)]
 LISTINGS = [{'id': 'lst_1', 'itemId': 1, 'accountId': 'acc_1', 'platformId': '9001', 'url': 'https://example.com/items/9001',
@@ -35,6 +41,22 @@ def page(elements, query):
     chunk = elements[start:start + limit]
     following = start + limit
     return 200, {'data': chunk, 'nextCursor': str(following) if following < len(elements) else None}
+
+
+def snapshot():
+    """Every payload the fake serves, by name, built from the same data and page() as the routes."""
+    return {
+        'me': ME,
+        'accountPage': page(ACCOUNTS, {})[1],
+        'account': ACCOUNTS[0],
+        'itemPage': page(ITEMS, {})[1],
+        'item': ITEMS[0],
+        'listingPage': {'data': LISTINGS, 'nextCursor': None},
+        'conversationPage': page(CONVERSATIONS, {})[1],
+        'conversation': CONVERSATIONS[0],
+        'messagePage': page(MESSAGES, {})[1],
+        'error': error(404, 'item_not_found', 'No such item.')[1],
+    }
 
 
 def handler(key, log):
@@ -97,10 +119,16 @@ def handler(key, log):
 
 def main():
     args = argparse.ArgumentParser()
-    args.add_argument('--port', type=int, required=True)
-    args.add_argument('--key', required=True)
-    args.add_argument('--log', required=True)
+    args.add_argument('--dump', action='store_true')
+    args.add_argument('--port', type=int)
+    args.add_argument('--key')
+    args.add_argument('--log')
     options = args.parse_args()
+    if options.dump:
+        print(json.dumps(snapshot()))
+        return
+    if options.port is None or not options.key or not options.log:
+        args.error('--port, --key and --log are required unless --dump is given.')
     ThreadingHTTPServer(('127.0.0.1', options.port), handler(options.key, options.log)).serve_forever()
 
 
