@@ -34,7 +34,7 @@ class ReleaseRequestTest(unittest.TestCase):
             path = Path(root) / 'manifest.json'
             path.write_text(json.dumps(good))
             release.validate_manifest(path, '1.0.0', 'a' * 40)
-            for change in [dict(tag='v1.0.0'), dict(version='0.2.0'), dict(sourceCommit='b' * 40)]:
+            for change in [dict(tag='v1.0.0'), dict(version='1.0.1'), dict(sourceCommit='b' * 40)]:
                 path.write_text(json.dumps(dict(good, **change)))
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     release.validate_manifest(path, '1.0.0', 'a' * 40)
