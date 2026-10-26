@@ -28,7 +28,7 @@ class ReleaseSignatureTest(unittest.TestCase):
     def test_exact_bytes_are_signed_and_tampering_unknown_keys_and_overwrites_fail(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); manifest = root / 'manifest.json'; signature = root / 'manifest.sig'
-            manifest.write_text('{"version":"0.1.0-alpha.1"}\n')
+            manifest.write_text('{"version":"1.0.0-alpha.1"}\n')
             private, public = self.keys[0]
             signing.sign(manifest, private, public, signature)
             signing.verify(manifest, signature, public)

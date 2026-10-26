@@ -7,7 +7,7 @@ clikt = "5.1.0"
 mordant = "3.0.2"
 okio = "3.18.2"
 junit = "5.11.4"
-controlresell-sdk = "0.1.0-SNAPSHOT"
+controlresell-sdk = "1.0.0-SNAPSHOT"
 
 [plugins]
 multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

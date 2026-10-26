@@ -4,7 +4,7 @@
 accounts, your stock and your buyer conversations from a terminal, a script or a CI job. It is a native executable for
 macOS, Linux and Windows, built with Kotlin Multiplatform on the ControlResell Kotlin SDK. No JVM is required.
 
-The commands below describe the first release, 0.1.0. Releases are listed on the [GitHub releases page](https://github.com/controlresell/cli/releases).
+The commands below describe the first release, 1.0.0. Releases are listed on the [GitHub releases page](https://github.com/controlresell/cli/releases).
 
 ## Install
 
@@ -25,7 +25,7 @@ access. Running the installer again keeps your saved login.
 
 The script you download is pinned to the release it comes from, so every file it fetches matches that exact version. `latest` serves
 the newest stable release only. To install a specific version or a pre-release, replace `releases/latest/download/` with
-`releases/download/<version>/`, without a `v` prefix (for example `releases/download/0.1.0/`).
+`releases/download/<version>/`, without a `v` prefix (for example `releases/download/1.0.0/`).
 
 The installer runs `cr install`, which you can also run yourself: `--version` picks a release, `--bundle DIR` installs a
 downloaded release directory, `--root DIR` chooses the directory. The default directory is

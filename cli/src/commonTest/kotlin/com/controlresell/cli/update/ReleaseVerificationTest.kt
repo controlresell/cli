@@ -82,7 +82,7 @@ class ReleaseVerificationTest {
         failure("release_target_unsupported") { future.verifyBinary(Buffer().writeUtf8(ReleaseFixtures.binaryText), "linux-riscv64") }
     }
     @Test fun artifactVersionsAndNamesDoNotPermitPathOrNumericAmbiguity() {
-        for (version in listOf("0.1.0", "1.2.3-alpha.1", "0.1.0-SNAPSHOT")) assertTrue(ReleaseFormat.validVersion(version), version)
+        for (version in listOf("1.0.0", "1.2.3-alpha.1", "1.0.0-SNAPSHOT")) assertTrue(ReleaseFormat.validVersion(version), version)
         for (version in listOf("../escape", "v1.2.3", "1.2", "01.2.3", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+unsupported")) assertFalse(ReleaseFormat.validVersion(version), version)
         assertEquals("cr-1.2.3-windows-x64.exe", ReleaseFormat.fileName("1.2.3", "windows-x64"))
     }

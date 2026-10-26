@@ -25,7 +25,7 @@ def native_header(target):
 
 
 class ReleaseBundleTest(unittest.TestCase):
-    revision = '0.1.0-alpha.1'
+    revision = '1.0.0-alpha.1'
     source_commit = 'a' * 40
 
     def fixture(self, inputs):
