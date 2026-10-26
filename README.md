@@ -192,6 +192,10 @@ python3 scripts/smoke-native.py --binary cli/build/bin/macosArm64/releaseExecuta
 `smoke-native.py` runs the native executable against a local fake of the public API (`scripts/fake-api.py`), with an
 isolated configuration directory and synthetic keys. Tests never call the real API.
 
+`SmokeFakeApiContractTest` (part of `:cli:jvmTest`, so of every pull request) decodes every payload the fake serves
+(`python3 scripts/fake-api.py --dump`) with the pinned Kotlin SDK models, so a drift between the fake and the SDK fails the PR
+instead of the native smoke.
+
 Pull requests run the JVM tests. Native tests, signed bundles and installation acceptance on all four targets run on
 version tags and on a manual full validation; publishing a release is a separate, manual step.
 
