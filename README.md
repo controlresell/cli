@@ -4,7 +4,7 @@
 accounts, your stock and your buyer conversations from a terminal, a script or a CI job. It is a native executable for
 macOS, Linux and Windows, built with Kotlin Multiplatform on the ControlResell Kotlin SDK. No JVM is required.
 
-**Pre-release:** no version is published yet. The commands below describe the first release, 0.1.0.
+The commands below describe the first release, 0.1.0. Releases are listed on the [GitHub releases page](https://github.com/controlresell/cli/releases).
 
 ## Install
 
@@ -45,7 +45,7 @@ step. To undo it, delete `~/.local/bin/cr` (macOS/Linux) or remove the launcher 
 ## Log in
 
 Create an API key in the ControlResell app, with the scopes of the commands you use (`accounts:read`, `items:read`,
-`conversations:read`, `orders:read`, and `items:write`, `conversations:write` for the commands that change something; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
+`conversations:read`, `orders:read`, `customers:read`, `webhooks:read`, and `items:write`, `conversations:write`, `webhooks:write` for the commands that change something; a missing scope makes the command exit with 3). Keys start with `cr_`. Pass it on standard input. It is checked with the API before it is
 saved, and never appears in your shell history or in the process list:
 
 ```sh
@@ -73,6 +73,8 @@ cr items listings ITEM_ID
 cr orders list [--bucket to_send|to_pickup] [--platform VINTED] [--account ACCOUNT_ID] [--from 2026-10-01T00:00:00Z] [--to ...]
 cr orders get ORDER_ID
 cr orders labels ORDER_ID
+cr customers list [--account ACCOUNT_ID] [--from 2026-10-01T00:00:00Z] [--to ...]
+cr customers get CUSTOMER_ID
 cr catalogs categories [--parent CATEGORY_ID] [--platform VINTED]
 cr catalogs category CATEGORY_ID
 cr catalogs fields CATEGORY_ID
