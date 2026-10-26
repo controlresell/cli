@@ -43,19 +43,60 @@ def page(elements, query):
     return 200, {'data': chunk, 'nextCursor': str(following) if following < len(elements) else None}
 
 
+def route(path, query):
+    """The answer (status, body) to an authenticated GET; shared by the server and by --dump."""
+    if not path.startswith(PREFIX):
+        return error(404, 'route_not_found', 'No such route.')
+    path = path[len(PREFIX):]
+    if path == '/me':
+        return 200, ME
+    if path == '/accounts':
+        return page(ACCOUNTS, query)
+    if path.startswith('/accounts/'):
+        found = [a for a in ACCOUNTS if a['id'] == path.split('/')[2]]
+        return (200, found[0]) if found else error(404, 'account_not_found', 'No such account.')
+    if path == '/items':
+        selected = ITEMS
+        if 'sold' in query:
+            selected = [i for i in selected if str(i['sold']).lower() == query['sold'][0]]
+        return page(selected, query)
+    if path == '/items/429':
+        return error(429, 'rate_limited', 'Too many requests.')
+    if path == '/items/402':
+        return error(402, 'plan_required', 'Your plan does not include the API.')
+    if path.endswith('/listings'):
+        return 200, {'data': LISTINGS, 'nextCursor': None}
+    if path.startswith('/items/'):
+        found = [i for i in ITEMS if str(i['id']) == path.split('/')[2]]
+        return (200, found[0]) if found else error(404, 'item_not_found', 'No such item.')
+    if path == '/conversations':
+        return page(CONVERSATIONS, query)
+    if path.endswith('/messages'):
+        return page(MESSAGES, query)
+    if path.startswith('/conversations/'):
+        found = [c for c in CONVERSATIONS if c['id'] == path.split('/')[2]]
+        return (200, found[0]) if found else error(404, 'conversation_not_found', 'No such conversation.')
+    return error(404, 'route_not_found', 'No such route.')
+
+
 def snapshot():
-    """Every payload the fake serves, by name, built from the same data and page() as the routes."""
+    """Every payload the smoke reads, by name, taken from route() itself so the dump cannot drift from the server."""
+    def get(path):
+        status, body = route(PREFIX + path, {})
+        assert status == 200, (path, status)
+        return body
     return {
-        'me': ME,
-        'accountPage': page(ACCOUNTS, {})[1],
-        'account': ACCOUNTS[0],
-        'itemPage': page(ITEMS, {})[1],
-        'item': ITEMS[0],
-        'listingPage': {'data': LISTINGS, 'nextCursor': None},
-        'conversationPage': page(CONVERSATIONS, {})[1],
-        'conversation': CONVERSATIONS[0],
-        'messagePage': page(MESSAGES, {})[1],
-        'error': error(404, 'item_not_found', 'No such item.')[1],
+        'me': get('/me'),
+        'accountPage': get('/accounts'),
+        'account': get('/accounts/acc_1'),
+        'itemPage': get('/items'),
+        'item': get('/items/1'),
+        'listingPage': get('/items/1/listings'),
+        'conversationPage': get('/conversations'),
+        'conversation': get('/conversations/conv_1'),
+        'messagePage': get('/conversations/conv_1/messages'),
+        'errors': [route(PREFIX + path, {})[1] for path in ('/items/999', '/items/402', '/items/429', '/nowhere')]
+                  + [error(401, 'invalid_token', 'The API key is invalid or revoked.')[1]],
     }
 
 
@@ -69,7 +110,10 @@ def handler(key, log):
             query = parse_qs(url.query)
             with open(log, 'a') as output:
                 output.write(json.dumps({'method': 'GET', 'path': url.path, 'query': query, 'headers': dict(self.headers)}) + '\n')
-            status, body = self.route(url.path, query)
+            if self.headers.get('Authorization') != f'Bearer {key}':
+                status, body = error(401, 'invalid_token', 'The API key is invalid or revoked.')
+            else:
+                status, body = route(url.path, query)
             payload = json.dumps(body).encode()
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
@@ -78,42 +122,6 @@ def handler(key, log):
                 self.send_header('Retry-After', '7')
             self.end_headers()
             self.wfile.write(payload)
-
-        def route(self, path, query):
-            if self.headers.get('Authorization') != f'Bearer {key}':
-                return error(401, 'invalid_token', 'The API key is invalid or revoked.')
-            if not path.startswith(PREFIX):
-                return error(404, 'route_not_found', 'No such route.')
-            path = path[len(PREFIX):]
-            if path == '/me':
-                return 200, ME
-            if path == '/accounts':
-                return page(ACCOUNTS, query)
-            if path.startswith('/accounts/'):
-                found = [a for a in ACCOUNTS if a['id'] == path.split('/')[2]]
-                return (200, found[0]) if found else error(404, 'account_not_found', 'No such account.')
-            if path == '/items':
-                selected = ITEMS
-                if 'sold' in query:
-                    selected = [i for i in selected if str(i['sold']).lower() == query['sold'][0]]
-                return page(selected, query)
-            if path == '/items/429':
-                return error(429, 'rate_limited', 'Too many requests.')
-            if path == '/items/402':
-                return error(402, 'plan_required', 'Your plan does not include the API.')
-            if path.endswith('/listings'):
-                return 200, {'data': LISTINGS, 'nextCursor': None}
-            if path.startswith('/items/'):
-                found = [i for i in ITEMS if str(i['id']) == path.split('/')[2]]
-                return (200, found[0]) if found else error(404, 'item_not_found', 'No such item.')
-            if path == '/conversations':
-                return page(CONVERSATIONS, query)
-            if path.endswith('/messages'):
-                return page(MESSAGES, query)
-            if path.startswith('/conversations/'):
-                found = [c for c in CONVERSATIONS if c['id'] == path.split('/')[2]]
-                return (200, found[0]) if found else error(404, 'conversation_not_found', 'No such conversation.')
-            return error(404, 'route_not_found', 'No such route.')
     return Handler
 
 
@@ -125,6 +133,8 @@ def main():
     args.add_argument('--log')
     options = args.parse_args()
     if options.dump:
+        if options.port is not None or options.key or options.log:
+            args.error('--dump takes no other option.')
         print(json.dumps(snapshot()))
         return
     if options.port is None or not options.key or not options.log:

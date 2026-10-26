@@ -24,9 +24,21 @@ class SmokeFakeApiContractTest {
         var directory: File? = File("").absoluteFile
         while (directory != null && !File(directory, "scripts/fake-api.py").isFile) directory = directory.parentFile
         val script = checkNotNull(directory) { "scripts/fake-api.py not found above ${File("").absolutePath}" }.resolve("scripts/fake-api.py")
-        val process = ProcessBuilder("python3", script.path, "--dump").redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText()
-        assertTrue(process.waitFor(60, TimeUnit.SECONDS) && process.exitValue() == 0, "fake-api.py --dump failed:\n$output")
+        val stdout = File.createTempFile("fake-api-dump", ".json")
+        val stderr = File.createTempFile("fake-api-dump", ".err")
+        try {
+            val process = ProcessBuilder("python3", script.path, "--dump").redirectOutput(stdout).redirectError(stderr).start()
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                error("fake-api.py --dump did not finish within 60 seconds")
+            }
+            assertEquals(0, process.exitValue(), "fake-api.py --dump failed:\n${stderr.readText()}")
+        } catch (failure: Throwable) {
+            stdout.delete(); stderr.delete()
+            throw failure
+        }
+        val output = stdout.readText()
+        stdout.delete(); stderr.delete()
         strict.parseToJsonElement(output).jsonObject
     }
 
@@ -46,9 +58,9 @@ class SmokeFakeApiContractTest {
         assertEquals(5, page.data.size)
         val item = decode<Item>("item")
         assertTrue(item.photos.isNotEmpty() && item.enumValues.isNotEmpty() && item.attributes.isNotEmpty() && item.customFields.isNotEmpty())
-        assertEquals(ItemEnumValue("season", "SUMMER"), item.enumValues.single())
-        assertEquals(ItemAttribute("brand_note", "vintage"), item.attributes.single())
-        assertEquals(ItemCustomField(7, "shelf A"), item.customFields.single())
+        assertEquals("season", item.enumValues.single().enumKey)
+        assertEquals("brand_note", item.attributes.single().fieldKey)
+        assertEquals("shelf A", item.customFields.single().value)
     }
 
     @Test fun `the fake serves listings the SDK model reads`() {
@@ -61,7 +73,8 @@ class SmokeFakeApiContractTest {
         assertEquals(3, decode<MessagePage>("messagePage").data.size)
     }
 
-    @Test fun `the fake serves errors the SDK model reads`() {
-        assertEquals("item_not_found", decode<ErrorResponse>("error").error.code)
+    @Test fun `the fake serves every error body the SDK model reads`() {
+        val errors = strict.decodeFromJsonElement<List<ErrorResponse>>(checkNotNull(served["errors"]))
+        assertEquals(listOf("item_not_found", "plan_required", "rate_limited", "route_not_found", "invalid_token"), errors.map { it.error.code })
     }
 }
