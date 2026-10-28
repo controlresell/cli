@@ -13,6 +13,8 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.groups.provideDelegate
 import com.github.ajalt.clikt.parameters.options.*
 import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
@@ -48,16 +50,17 @@ private class UploadFile(private val environment: CliEnvironment) : SuspendingCl
         val size = metadata.size ?: throw UsageError("Cannot read the size of $path.")
         if (size == 0L) throw UsageError("$path is empty.")
         if (size > MAX_BYTES) throw UsageError("$path is larger than 20 MiB.")
-        val type = contentType ?: CONTENT_TYPES[file.name.substringAfterLast('.', "").lowercase()]
+        val type = contentType?.trim()?.lowercase() ?: CONTENT_TYPES[file.name.substringAfterLast('.', "").lowercase()]
             ?: throw UsageError("Cannot guess the type of $path: pass --content-type.")
         if (type !in CONTENT_TYPES.values) throw UsageError("--content-type must be one of ${CONTENT_TYPES.values.distinct().joinToString(", ")}.")
         val name = filename ?: file.name
         if (name.isBlank()) throw UsageError("--filename cannot be empty.")
         val bytes = fs.read(file) { readByteArray() }
+        if (bytes.isEmpty() || bytes.size > MAX_BYTES) throw UsageError("$path changed while it was read: it must be 1 byte to 20 MiB.")
         environment.sdk().use { client ->
             // The signed address of the registration is a short-lived credential: only the id is printed.
             val upload = client.uploadFile(bytes, name, type, write.key())
-            if (json) echo("{\"id\":\"${upload.id}\"}") else echo(sheet("ID" to upload.id, "Next" to "cr items create --name NAME --photo-id ${upload.id}"))
+            if (json) echo(buildJsonObject { put("id", upload.id) }.toString()) else echo(sheet("ID" to upload.id, "Next" to "cr items create --name NAME --photo-id ${upload.id}"))
         }
     }
 }
