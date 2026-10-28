@@ -57,6 +57,22 @@ class WriteCommandsTest {
         assertEquals(1, cli.requests.size, "the lone --drop-type sent nothing")
     }
 
+    @Test fun `scheduled-at reaches publish, price-drop and republish and is left out otherwise`() = runTest {
+        val cli = signedIn()
+        cli.on(HttpMethod.Post, "/api/public/v1/items/7/publish", status = 202, body = action)
+        cli.on(HttpMethod.Post, "/api/public/v1/items/7/price-drop", status = 202, body = action)
+        cli.on(HttpMethod.Post, "/api/public/v1/items/7/republish", status = 202, body = action)
+        val at = "2026-11-02T10:00:00Z"
+        assertEquals(0, cli.run("items", "publish", "7", "--account", "acc_1", "--scheduled-at", at).code)
+        assertEquals(0, cli.run("items", "price-drop", "7", "--type", "ABSOLUTE", "--value", "3", "--scheduled-at", at).code)
+        assertEquals(0, cli.run("items", "republish", "7", "--scheduled-at", at).code)
+        assertEquals(listOf(at, at, at), cli.requests.map { it.json()["scheduledAt"]!!.jsonPrimitive.content })
+        cli.run("items", "publish", "7", "--account", "acc_1")
+        assertFalse("scheduledAt" in cli.requests.last().json())
+        assertEquals(ExitCode.USAGE, cli.run("items", "publish", "7", "--account", "acc_1", "--scheduled-at", "tomorrow").code)
+        assertEquals(4, cli.requests.size, "the bad --scheduled-at sent nothing")
+    }
+
     @Test fun `price-drop sends the drop to the price-drop route`() = runTest {
         val cli = signedIn()
         cli.on(HttpMethod.Post, "/api/public/v1/items/7/price-drop", status = 202, body = action)

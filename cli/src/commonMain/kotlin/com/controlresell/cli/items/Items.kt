@@ -223,14 +223,16 @@ private class PublishItem(private val environment: CliEnvironment) : SuspendingC
     private val id by argument(help = "The item's identifier, a number.").long()
     private val accounts by option("--account", help = "A marketplace account to publish on. Repeat it for several accounts.").multiple(required = true)
     private val cancelBeforeProceeding by option("--cancel-before-proceeding", help = "Cancel the item's pending actions before publishing.").flag()
+    private val scheduledAt by option("--scheduled-at", help = "Run at this ISO-8601 instant with its offset (at most 30 days ahead), such as 2026-11-02T10:00:00Z. Default: now.")
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Schedule the publication of an item on marketplace accounts. Needs the items:write scope."
     override suspend fun run() {
         checkAccounts(accounts)
+        val at = scheduledAt?.let { parseInstant("--scheduled-at", it) }
         environment.sdk().use { client ->
         val response = client.items.publishItem(id, write.key(),
-            PublishRequest(accountIds = accounts, cancelBeforeProceeding = cancelBeforeProceeding.takeIf { it }))
+            PublishRequest(accountIds = accounts, cancelBeforeProceeding = cancelBeforeProceeding.takeIf { it }, scheduledAt = at))
         if (json) echo(response.response.bodyAsText().trim()) else echo(scheduled(response.body()))
         }
     }
@@ -243,11 +245,13 @@ private class PriceDropItem(private val environment: CliEnvironment) : Suspendin
     private val roundType by option("--round-type", help = "How the new price is rounded: UP, DOWN or NEAREST.")
     private val roundStep by option("--round-step", help = "The rounding step, such as 0.5.")
     private val accounts by option("--account", help = "Only the listings on this marketplace account. Repeat it for several. Default: every account the item is online on.").multiple()
+    private val scheduledAt by option("--scheduled-at", help = "Run at this ISO-8601 instant with its offset (at most 30 days ahead), such as 2026-11-02T10:00:00Z. Default: now.")
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Lower the price of an item's listings. Needs the items:write scope."
     override suspend fun run() = environment.sdk().use { client ->
-        val response = client.items.dropItemPrice(id, write.key(), priceDrop(type, value, roundType, roundStep, accounts))
+        val at = scheduledAt?.let { parseInstant("--scheduled-at", it) }
+        val response = client.items.dropItemPrice(id, write.key(), priceDrop(type, value, roundType, roundStep, accounts, at))
         if (json) echo(response.response.bodyAsText().trim()) else echo(scheduled(response.body()))
     }
 }
@@ -259,6 +263,7 @@ private class RepublishItem(private val environment: CliEnvironment) : Suspendin
     private val allowIfDeleted by option("--allow-if-deleted", help = "Republish even if the listing was deleted.").flag()
     private val dropType by option("--drop-type", help = "Lower the price while republishing: ABSOLUTE or PERCENTAGE. Needs --drop-value.")
     private val dropValue by option("--drop-value", help = "What is removed from the price while republishing. Needs --drop-type.")
+    private val scheduledAt by option("--scheduled-at", help = "Run at this ISO-8601 instant with its offset (at most 30 days ahead), such as 2026-11-02T10:00:00Z. Default: now.")
     private val write by WriteOptions()
     private val json by option("--json", help = "Print the API's JSON response.").flag()
     override fun help(context: Context) = "Delete an item's listings and publish them again. Needs the items:write scope."
@@ -266,11 +271,12 @@ private class RepublishItem(private val environment: CliEnvironment) : Suspendin
         if ((dropType == null) != (dropValue == null)) throw UsageError("--drop-type and --drop-value go together.")
         if (priceVariation != null && !VARIATION.matches(priceVariation!!)) throw UsageError("--price-variation must be a number such as -5 or +2.")
         checkAccounts(accounts)
+        val at = scheduledAt?.let { parseInstant("--scheduled-at", it) }
         val drop = dropType?.let { priceDrop(it, dropValue!!, null, null, emptyList()) }
         environment.sdk().use { client ->
         val response = client.items.republishItem(id, write.key(), RepublishRequest(
             accountIds = accounts.takeIf { it.isNotEmpty() }, priceDrop = drop, priceVariation = priceVariation,
-            allowIfDeleted = allowIfDeleted.takeIf { it }))
+            allowIfDeleted = allowIfDeleted.takeIf { it }, scheduledAt = at))
         if (json) echo(response.response.bodyAsText().trim()) else echo(scheduled(response.body()))
         }
     }
@@ -297,7 +303,7 @@ private fun checkAccounts(accounts: List<String>) {
 }
 
 /** Local checks first: a typo must not reach the marketplace accounts. */
-private fun priceDrop(type: String, value: String, roundType: String?, roundStep: String?, accounts: List<String>): PriceDropRequest {
+private fun priceDrop(type: String, value: String, roundType: String?, roundStep: String?, accounts: List<String>, scheduledAt: Instant? = null): PriceDropRequest {
     if (type.uppercase() !in setOf("ABSOLUTE", "PERCENTAGE")) throw UsageError("--type must be ABSOLUTE or PERCENTAGE.")
     if (!DECIMAL.matches(value) || value.toDouble() <= 0.0) throw UsageError("--value must be a positive decimal number such as 3 or 10.5.")
     if (type.uppercase() == "PERCENTAGE" && value.toDouble() >= 100.0) throw UsageError("--value must be under 100 for a PERCENTAGE.")
@@ -305,7 +311,7 @@ private fun priceDrop(type: String, value: String, roundType: String?, roundStep
     if (roundStep != null && (!DECIMAL.matches(roundStep) || roundStep.toDouble() <= 0.0)) throw UsageError("--round-step must be a positive decimal number such as 0.5.")
     checkAccounts(accounts)
     return PriceDropRequest(type = type.uppercase(), value = value, roundType = roundType?.uppercase(), roundStep = roundStep,
-        accountIds = accounts.takeIf { it.isNotEmpty() })
+        accountIds = accounts.takeIf { it.isNotEmpty() }, scheduledAt = scheduledAt)
 }
 
 internal fun scheduled(action: ScheduledAction) = sheet(
