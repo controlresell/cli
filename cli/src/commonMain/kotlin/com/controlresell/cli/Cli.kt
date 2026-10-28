@@ -8,6 +8,7 @@ import com.controlresell.cli.identity.*
 import com.controlresell.cli.items.Items
 import com.controlresell.cli.customers.Customers
 import com.controlresell.cli.favorites.Favorites
+import com.controlresell.cli.files.Files
 import com.controlresell.cli.orders.Orders
 import com.controlresell.cli.webhooks.Webhooks
 import com.controlresell.cli.update.*
@@ -54,7 +55,7 @@ class Cli(environment: CliEnvironment = CliEnvironment()) : SuspendingNoOpCliktC
     override fun help(context: Context) = "The ControlResell command line. First use: cr login."
     init {
         subcommands(Login(environment), Logout(environment), WhoAmI(environment), Accounts(environment), Items(environment),
-            Conversations(environment), Orders(environment), Customers(environment), Catalogs(environment), Favorites(environment), Webhooks(environment), Version(), VerifyRelease(), Update(), Install())
+            Conversations(environment), Orders(environment), Customers(environment), Catalogs(environment), Favorites(environment), Files(environment), Webhooks(environment), Version(), VerifyRelease(), Update(), Install())
     }
 }
 
