@@ -93,6 +93,8 @@ cr items republish ITEM_ID [--account ACCOUNT_ID] [--price-variation -5] [--allo
 cr items delete ITEM_ID [--yes]
 cr conversations send CONVERSATION_ID --text "Hello!"
 cr conversations offer CONVERSATION_ID --price 12.50 --currency EUR [--transaction TRANSACTION_ID]
+cr files upload FILE [--filename NAME] [--content-type image/jpeg|image/png|image/webp|image/heic|image/heif] [--idempotency-key K]
+cr files get FILE_ID
 cr webhooks list
 cr webhooks get ENDPOINT_ID
 cr webhooks create --url https://example.com/hooks --event item.sold [--event ...] [--description D] [--payload light|full]
@@ -119,6 +121,7 @@ in your accounts' browsers, a message or an offer reaches the buyer. Read what y
   the question in a script; with no input to answer it (a closed standard input) and no `--yes`, it exits with 2 and does
   nothing. An item still online is refused by the API (`item_still_listed`, exit 7).
 - `cr items update` changes the item in ControlResell only, not its listings on the marketplaces; a list you give (`--label`, `--color-id`, `--photo-id`, `--material-id`, `--enum`, `--attribute`, `--custom-field`) replaces the whole list, and clearing a field is not available from the CLI yet.
+- `cr files upload` sends a photo (jpeg, png, webp, heic or heif, at most 20 MiB) and prints its id, which `cr items create|update --photo-id ID` then uses; it needs `items:write`, and `cr files get` needs `items:read` (its status is `PENDING` until the bytes are stored).
 - `--scheduled-at T` on `publish`, `price-drop` and `republish` runs the action at that ISO-8601 instant (with its offset, at most 30 days ahead) instead of now; without it the action runs now.
 - Every write that creates something (`create`, `publish`, `price-drop`, `republish`, `send`, `offer`) carries an `Idempotency-Key`, random by default. Pass `--idempotency-key KEY` (1 to 255 characters) to
   retry a command safely: the API answers the first response again instead of writing twice.
