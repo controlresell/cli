@@ -3,7 +3,7 @@
 # publish it to the local Maven repository as 1.0.0-SNAPSHOT, the version the CLI depends on.
 # Usage: scripts/publish-sdk-locally.sh [Gradle publication tasks...]   (default: publishToMavenLocal)
 set -euo pipefail
-SDK_COMMIT=de46c9cda541f7d70c81cba965e2a1bd941e7220
+SDK_COMMIT=b86b6cbecd2e4b21fa601f44c1aec410292c2522
 directory="$(mktemp -d)"
 trap 'rm -rf "$directory"' EXIT
 git clone --quiet https://github.com/controlresell/kotlin-sdk.git "$directory"
